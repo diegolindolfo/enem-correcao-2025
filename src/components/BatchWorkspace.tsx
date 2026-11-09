@@ -18,25 +18,16 @@ import {
   RotateCcw,
   Download,
   Trash2,
-  FileSpreadsheet,
-  UploadCloud,
+  Upload,
   CheckCircle2,
   AlertCircle,
   Clock,
-  Sparkles,
-  ShieldCheck,
-  Settings2,
-  Eye,
-  PlusCircle,
+  Settings,
+  Plus,
   Search,
-  KeyRound,
-  Cpu,
-  TrendingUp,
+  X,
   FileText,
   Image as ImageIcon,
-  ChevronDown,
-  ChevronUp,
-  X,
 } from 'lucide-react';
 
 export default function BatchWorkspace() {
@@ -52,23 +43,20 @@ export default function BatchWorkspace() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedItemForModal, setSelectedItemForModal] = useState<BatchItem | null>(null);
 
-  // Filtros e busca da tabela
-  const [buscaAluno, setBuscaAluno] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState<'todos' | 'concluido' | 'pendente' | 'erro'>('todos');
-  const [mostrarProposta, setMostrarProposta] = useState(true);
-
-  // Modal de inserção manual rápida
+  // Menus minimalistas (Configurações e Texto Avulso)
+  const [mostrarConfig, setMostrarConfig] = useState(false);
   const [mostrarModalManual, setMostrarModalManual] = useState(false);
   const [novoAlunoManual, setNovoAlunoManual] = useState('');
   const [novoTextoManual, setNovoTextoManual] = useState('');
 
-  // Métricas agregadas
+  const [buscaAluno, setBuscaAluno] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
   const [totalTokens, setTotalTokens] = useState(0);
 
   const processingRef = useRef(false);
   processingRef.current = isProcessing;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Carrega itens persistidos do IndexedDB ao iniciar e recalcula notas com o motor determinístico atualizado (custo zero)
   useEffect(() => {
     carregarTodosItens().then(async (itensSalvos) => {
       if (itensSalvos && itensSalvos.length > 0) {
@@ -123,77 +111,21 @@ export default function BatchWorkspace() {
     localStorage.setItem('enem_gemini_key', key);
   };
 
-  // Adicionar redação digitada avulsa
-  const handleAdicionarManual = async () => {
-    if (!novoTextoManual.trim()) return;
-    const novoItem: BatchItem = {
-      id: `manual-${Date.now()}`,
-      identificadorAluno: novoAlunoManual.trim() || `Aluno Avulso ${items.length + 1}`,
-      modalidade: 'text',
-      texto: novoTextoManual,
-      tema,
-      status: 'pendente',
-    };
-    const atualizados = [novoItem, ...items];
-    setItems(atualizados);
-    await salvarLoteBatch(atualizados);
-    setNovoAlunoManual('');
-    setNovoTextoManual('');
-    setMostrarModalManual(false);
-  };
-
-  // 1. Importação de Arquivo XLSX/CSV
-  const handleSpreadsheetUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data: any[] = XLSX.utils.sheet_to_json(ws);
-
-        const novosItens: BatchItem[] = data.map((row, index) => {
-          const nomeAluno = row.nome || row.aluno || row.candidato || row.id || row.ID || `Candidato ${index + 1}`;
-          const texto = row.texto || row.redacao || row.conteudo || '';
-          const temaLinha = row.tema || row.proposta || tema;
-
-          return {
-            id: `batch-${Date.now()}-${index}`,
-            identificadorAluno: String(nomeAluno),
-            modalidade: 'text',
-            texto: String(texto),
-            tema: temaLinha,
-            status: 'pendente',
-          };
-        });
-
-        const itensAtualizados = [...items, ...novosItens];
-        setItems(itensAtualizados);
-        await salvarLoteBatch(itensAtualizados);
-      } catch (err: any) {
-        alert('Erro ao carregar planilha: ' + err.message);
-      }
-    };
-    reader.readAsBinaryString(file);
-    e.target.value = '';
-  };
-
-  // 2. Importação de Múltiplos Arquivos (TXT, JPG, PNG, PDF)
-  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  // Upload unificado sem fricção: detecta sozinho se é planilha (XLSX/CSV), imagem/PDF ou TXT
+  const processarArquivosRecebidos = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
 
     const novosItens: BatchItem[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const isImageOrPdf = file.type.startsWith('image/') || file.type === 'application/pdf';
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
-      if (isImageOrPdf) {
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        const itensPlanilha = await lerPlanilha(file);
+        novosItens.push(...itensPlanilha);
+      } else if (file.type.startsWith('image/') || file.type === 'application/pdf' || ext === 'pdf') {
         const { base64, mimeType } = await prepararMidiaOtimizada(file);
         novosItens.push({
           id: `media-${Date.now()}-${i}`,
@@ -217,10 +149,79 @@ export default function BatchWorkspace() {
       }
     }
 
-    const itensAtualizados = [...items, ...novosItens];
-    setItems(itensAtualizados);
-    await salvarLoteBatch(itensAtualizados);
-    e.target.value = '';
+    if (novosItens.length > 0) {
+      const itensAtualizados = [...items, ...novosItens];
+      setItems(itensAtualizados);
+      await salvarLoteBatch(itensAtualizados);
+    }
+  };
+
+  const lerPlanilha = (file: File): Promise<BatchItem[]> =>
+    new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const bstr = evt.target?.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const wsname = wb.SheetNames[0];
+          const ws = wb.Sheets[wsname];
+          const data: any[] = XLSX.utils.sheet_to_json(ws);
+
+          const extraidos: BatchItem[] = data.map((row, index) => {
+            const nomeAluno =
+              row.nome || row.aluno || row.candidato || row.id || row.ID || `Candidato ${index + 1}`;
+            const texto = row.texto || row.redacao || row.conteudo || '';
+            const temaLinha = row.tema || row.proposta || tema;
+
+            return {
+              id: `batch-${Date.now()}-${index}`,
+              identificadorAluno: String(nomeAluno),
+              modalidade: 'text',
+              texto: String(texto),
+              tema: temaLinha,
+              status: 'pendente',
+            };
+          });
+          resolve(extraidos);
+        } catch {
+          resolve([]);
+        }
+      };
+      reader.onerror = () => resolve([]);
+      reader.readAsBinaryString(file);
+    });
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      await processarArquivosRecebidos(e.target.files);
+      e.target.value = '';
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files) {
+      await processarArquivosRecebidos(e.dataTransfer.files);
+    }
+  };
+
+  const handleAdicionarManual = async () => {
+    if (!novoTextoManual.trim()) return;
+    const novoItem: BatchItem = {
+      id: `manual-${Date.now()}`,
+      identificadorAluno: novoAlunoManual.trim() || `Redação ${items.length + 1}`,
+      modalidade: 'text',
+      texto: novoTextoManual,
+      tema,
+      status: 'pendente',
+    };
+    const atualizados = [novoItem, ...items];
+    setItems(atualizados);
+    await salvarLoteBatch(atualizados);
+    setNovoAlunoManual('');
+    setNovoTextoManual('');
+    setMostrarModalManual(false);
   };
 
   const toBase64 = (file: File): Promise<string> =>
@@ -231,10 +232,9 @@ export default function BatchWorkspace() {
       reader.onerror = (error) => reject(error);
     });
 
-  // Comprime imagens grandes (> 1.5 MB) no navegador para evitar erro 413 Payload Too Large na Vercel/Netlify
   const prepararMidiaOtimizada = async (file: File): Promise<{ base64: string; mimeType: string }> => {
     if (!file.type.startsWith('image/') || file.size <= 1.5 * 1024 * 1024) {
-      return { base64: await toBase64(file), mimeType: file.type };
+      return { base64: await toBase64(file), mimeType: file.type || 'application/pdf' };
     }
 
     return new Promise((resolve) => {
@@ -269,7 +269,6 @@ export default function BatchWorkspace() {
     });
   };
 
-  // Avaliar um único item (usado pela fila ou pelo botão individual)
   const processarUnicoItem = async (item: BatchItem) => {
     atualizarStatusItem(item.id, 'processando');
     try {
@@ -291,6 +290,9 @@ export default function BatchWorkspace() {
 
       const data = await resp.json();
       if (!resp.ok) {
+        if (resp.status === 400 && data.error?.includes('Chave')) {
+          setMostrarConfig(true);
+        }
         throw new Error(data.error || 'Erro na resposta da API');
       }
 
@@ -300,7 +302,6 @@ export default function BatchWorkspace() {
     }
   };
 
-  // 3. Executor da Fila com Concorrência
   const startProcessing = async () => {
     setIsProcessing(true);
     processingRef.current = true;
@@ -381,14 +382,13 @@ export default function BatchWorkspace() {
   };
 
   const handleLimparLote = async () => {
-    if (confirm('Tem certeza de que deseja limpar todas as redações deste lote?')) {
+    if (confirm('Limpar todas as redações da lista?')) {
       await limparBancoLote();
       setItems([]);
       setTotalTokens(0);
     }
   };
 
-  // 4. Exportação para XLSX
   const exportarPlanilhaResultados = () => {
     if (items.length === 0) return;
 
@@ -396,38 +396,29 @@ export default function BatchWorkspace() {
       const r = it.resultado;
       return {
         Aluno: it.identificadorAluno,
-        Modalidade: it.modalidade === 'handwritten_media' ? 'Manuscrito (Imagem/PDF)' : 'Texto Digitado',
+        Modalidade: it.modalidade === 'handwritten_media' ? 'Manuscrito' : 'Texto',
         Status: it.status,
         Nota_Total: r?.anulada ? 0 : r?.nota_total ?? '',
         Anulada: r?.anulada ? 'SIM' : 'NÃO',
         Motivo_Anulacao: r?.motivo_anulacao || '',
-        C1_Nota: r?.c1?.pontos ?? '',
-        C1_Nivel: r?.c1?.nivel ?? '',
-        C1_Desvios_Qtd: r?.desvios_c1_validados?.length ?? '',
-        C2_Nota: r?.c2?.pontos ?? '',
-        C2_Nivel: r?.c2?.nivel ?? '',
-        C3_Nota: r?.c3?.pontos ?? '',
-        C3_Nivel: r?.c3?.nivel ?? '',
-        C4_Nota: r?.c4?.pontos ?? '',
-        C4_Nivel: r?.c4?.nivel ?? '',
-        C5_Nota: r?.c5?.pontos ?? '',
-        C5_Nivel: r?.c5?.nivel ?? '',
-        Tokens_Gastos: it.tokensUsage?.totalTokens ?? 0,
-        Erro: it.erroMensagem || '',
+        C1: r?.c1?.pontos ?? '',
+        C2: r?.c2?.pontos ?? '',
+        C3: r?.c3?.pontos ?? '',
+        C4: r?.c4?.pontos ?? '',
+        C5: r?.c5?.pontos ?? '',
+        Tokens: it.tokensUsage?.totalTokens ?? 0,
       };
     });
 
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Correcoes_ENEM_2025');
-    XLSX.writeFile(wb, `ENEM_2025_Lote_${Date.now()}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'ENEM_2025');
+    XLSX.writeFile(wb, `Correcoes_ENEM_${Date.now()}.xlsx`);
   };
 
-  // Estatísticas rápidas
   const totalConcluidos = items.filter((i) => i.status === 'concluido').length;
   const totalPendentes = items.filter((i) => i.status === 'pendente').length;
   const totalErros = items.filter((i) => i.status === 'erro').length;
-  const progressoPercent = items.length > 0 ? Math.round((totalConcluidos / items.length) * 100) : 0;
 
   const concluidosComNota = items.filter((i) => i.status === 'concluido' && i.resultado);
   const mediaNotas =
@@ -440,441 +431,232 @@ export default function BatchWorkspace() {
         )
       : 0;
 
-  const maiorNota =
-    concluidosComNota.length > 0
-      ? Math.max(...concluidosComNota.map((i) => (i.resultado?.anulada ? 0 : i.resultado?.nota_total || 0)))
-      : 0;
-
-  const mediaTokensPorRedacao = totalConcluidos > 0 ? Math.round(totalTokens / totalConcluidos) : 0;
-
-  // Filtragem da tabela
-  const itensFiltrados = items.filter((it) => {
-    const matchBusca = it.identificadorAluno.toLowerCase().includes(buscaAluno.toLowerCase());
-    const matchStatus = filtroStatus === 'todos' ? true : it.status === filtroStatus;
-    return matchBusca && matchStatus;
-  });
-
-  // Helper de cor para pílulas de nota C1-C5
-  const renderScorePill = (pontos?: number, travas?: string[]) => {
-    if (pontos === undefined) return <span className="text-slate-300">—</span>;
-    const temTrava = travas && travas.length > 0;
-    let colorClass = 'bg-slate-100 text-slate-800 border-slate-200';
-    if (pontos === 200) colorClass = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-    else if (pontos === 160) colorClass = 'bg-indigo-50 text-indigo-800 border-indigo-200';
-    else if (pontos === 120) colorClass = 'bg-sky-50 text-sky-800 border-sky-200';
-    else if (pontos <= 80) colorClass = 'bg-amber-50 text-amber-900 border-amber-200';
-
-    return (
-      <span
-        className={`inline-flex items-center justify-center gap-1 min-w-12 px-2 py-0.5 rounded-md text-xs font-extrabold border font-mono ${colorClass}`}
-        title={temTrava ? travas.join(' | ') : undefined}
-      >
-        {pontos}
-        {temTrava && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
-      </span>
-    );
-  };
+  const itensFiltrados = items.filter((it) =>
+    it.identificadorAluno.toLowerCase().includes(buscaAluno.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen bg-slate-100/90 text-slate-900 pb-16">
-      {/* Barra Superior Institucional */}
-      <header className="bg-slate-950 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center font-black text-base tracking-tighter shadow-inner border border-indigo-400/30">
-                E25
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-base sm:text-lg font-black tracking-tight text-white">
-                    ENEM 2025 • Avaliador em Massa
-                  </h1>
-                  <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Motor Determinístico
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Grade Específica Oficial • Extração Factual sem Alucinação de Nota
-                </p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-[#FAF9F6] text-stone-900 pb-20">
+      {/* Input de arquivo oculto unificado */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".xlsx,.xls,.csv,image/*,application/pdf,.txt"
+        onChange={handleFileChange}
+        className="hidden"
+      />
 
-            <button
-              onClick={() => setMostrarModalManual(true)}
-              className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition cursor-pointer"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              Avulsa
-            </button>
+      {/* Header Minimalista */}
+      <header className="bg-white/80 backdrop-blur-md border-b border-stone-200/80 sticky top-0 z-30">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img
+              src="/mascote.jpg"
+              alt="Mascote"
+              className="w-10 h-10 rounded-full object-cover border border-stone-200 shadow-2xs"
+            />
+            <div>
+              <h1 className="text-base font-bold tracking-tight text-stone-900 leading-none">
+                Redação ENEM
+              </h1>
+              <span className="text-[11px] text-stone-500 font-medium">
+                Grade Oficial 2025
+              </span>
+            </div>
           </div>
 
-          {/* Controles de API, Modelo e Redação Avulsa */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative flex-1 sm:flex-initial sm:w-64">
-              <KeyRound className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="password"
-                placeholder="Gemini API Key (ou via servidor)..."
-                value={apiKey}
-                onChange={(e) => salvarChave(e.target.value)}
-                className="w-full text-xs font-semibold pl-8 pr-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            <div className="relative">
-              <Cpu className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <select
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
-                className="text-xs font-bold pl-8 pr-7 py-2 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-              >
-                <option value="gemini-3.8-flash">gemini-3.8-flash (Padrão)</option>
-                <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Ultra Econômico)</option>
-                <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
-                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview (Pro)</option>
-              </select>
-            </div>
-
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setMostrarModalManual(true)}
-              className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+              onClick={() => setMostrarConfig(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-xs font-semibold text-stone-700 transition cursor-pointer"
+              title="Configurações de API e Modelo"
             >
-              <PlusCircle className="w-4 h-4" />
-              Digitar Redação Avulsa
+              <Settings className="w-4 h-4 text-stone-500" />
+              <span className="hidden sm:inline">Configurações</span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  apiKey ? 'bg-teal-600' : 'bg-amber-400'
+                }`}
+              />
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
-        {/* Card Retrátil de Configuração da Proposta Temática */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setMostrarProposta(!mostrarProposta)}
-            className="w-full px-6 py-4 flex items-center justify-between bg-slate-50/70 hover:bg-slate-100/60 transition cursor-pointer text-left border-b border-slate-200/70"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700">
-                <Settings2 className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
-                  Proposta Temática e Textos Motivadores do Lote
-                </h2>
-                <p className="text-xs text-slate-600 font-medium line-clamp-1">
-                  Tema ativo: <span className="font-bold text-indigo-950">{tema || 'Não definido'}</span>
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
-              <span>{mostrarProposta ? 'Ocultar' : 'Editar Proposta'}</span>
-              {mostrarProposta ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </div>
-          </button>
-
-          {mostrarProposta && (
-            <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-5 bg-white">
-              <div>
-                <label className="block text-xs font-extrabold text-slate-800 mb-1.5">
-                  Frase Temática Oficial (Critério de Tangência / Fuga na C2, C3 e C5):
-                </label>
-                <input
-                  type="text"
-                  value={tema}
-                  onChange={(e) => setTema(e.target.value)}
-                  placeholder="Ex: Desafios para a valorização de comunidades e povos tradicionais no Brasil"
-                  className="w-full text-xs font-semibold p-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
-                />
-                <p className="text-[11px] text-slate-500 mt-1.5">
-                  Caso sua planilha possua uma coluna chamada <code className="font-mono font-bold text-slate-700">tema</code>, ela terá prioridade para aquela linha.
-                </p>
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-extrabold text-slate-800">
-                    Textos Motivadores da Prova (Detector Matemático de Cópia):
-                  </label>
-                  <span className="text-[11px] font-semibold text-slate-400">
-                    {textosMotivadores.trim() ? `${textosMotivadores.trim().split(/\s+/).length} palavras` : 'Opcional'}
-                  </span>
-                </div>
-                <textarea
-                  rows={2}
-                  value={textosMotivadores}
-                  onChange={(e) => setTextosMotivadores(e.target.value)}
-                  placeholder="Cole aqui os textos motivadores I, II, III e IV para detecção automática de cópia a custo zero..."
-                  className="w-full text-xs font-mono p-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-indigo-600"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 3 Cards de Entrada e Controle de Execução */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Card 1: Planilha */}
-          <label className="bg-white border-2 border-dashed border-indigo-300 hover:border-indigo-600 hover:bg-indigo-50/30 p-6 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition shadow-2xs group">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-700 flex items-center justify-center mb-3 group-hover:bg-indigo-600 group-hover:text-white transition">
-              <FileSpreadsheet className="w-6 h-6" />
-            </div>
-            <span className="text-sm font-extrabold text-slate-900">Importar Planilha (XLSX / CSV)</span>
-            <span className="text-xs text-slate-500 mt-1 max-w-xs">
-              Reconhece colunas <strong className="text-slate-700">aluno</strong>, <strong className="text-slate-700">texto</strong> e <strong className="text-slate-700">tema</strong>
-            </span>
-            <input type="file" accept=".xlsx, .xls, .csv" onChange={handleSpreadsheetUpload} className="hidden" />
-          </label>
-
-          {/* Card 2: Manuscritos / Fotos / PDF */}
-          <label className="bg-white border-2 border-dashed border-slate-300 hover:border-slate-600 hover:bg-slate-50 p-6 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition shadow-2xs group">
-            <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center mb-3 group-hover:bg-slate-900 group-hover:text-white transition">
-              <UploadCloud className="w-6 h-6" />
-            </div>
-            <span className="text-sm font-extrabold text-slate-900">Importar Manuscritos / TXT</span>
-            <span className="text-xs text-slate-500 mt-1 max-w-xs">
-              Fotos de folhas (<strong className="text-slate-700">JPG, PNG, PDF</strong>) ou arquivos <strong className="text-slate-700">.TXT</strong> em lote
-            </span>
-            <input
-              type="file"
-              multiple
-              accept="image/*,application/pdf,.txt"
-              onChange={handleMediaUpload}
-              className="hidden"
-            />
-          </label>
-
-          {/* Card 3: Orquestrador da Fila */}
-          <div className="bg-white border border-slate-200/90 p-6 rounded-2xl shadow-2xs flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                  Orquestrador de Fila
-                </span>
-                <select
-                  value={concorrencia}
-                  onChange={(e) => setConcorrencia(Number(e.target.value))}
-                  className="text-xs font-bold border border-slate-300 rounded-lg px-2.5 py-1 bg-slate-50 text-slate-900 cursor-pointer"
-                  disabled={isProcessing}
-                >
-                  <option value={1}>1 simultânea</option>
-                  <option value={3}>3 simultâneas</option>
-                  <option value={5}>5 simultâneas</option>
-                </select>
-              </div>
-
-              {/* Barra de Progresso */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs font-bold">
-                  <span className="text-slate-600">
-                    {totalConcluidos} de {items.length} corrigidas
-                  </span>
-                  <span className="text-indigo-700">{progressoPercent}%</span>
-                </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-indigo-600 transition-all duration-300"
-                    style={{ width: `${progressoPercent}%` }}
-                  />
-                </div>
-              </div>
+      {/* Container Principal Minimalista */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-8 space-y-6">
+        {/* Barra Única de Tema + Ações Principais (Zero Fricção) */}
+        <div className="bg-white border border-stone-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-400 mb-1">
+                Tema da Redação
+              </label>
+              <input
+                type="text"
+                value={tema}
+                onChange={(e) => setTema(e.target.value)}
+                placeholder="Digite a frase temática..."
+                className="w-full text-sm font-medium px-3.5 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-teal-700 transition"
+              />
             </div>
 
-            <div className="flex items-center gap-2 mt-4">
+            <div className="flex items-center gap-2 sm:self-end">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-stone-200 hover:border-stone-300 bg-stone-50 hover:bg-stone-100 text-xs font-semibold text-stone-800 transition cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-teal-700" />
+                Importar Arquivos
+              </button>
+
+              <button
+                onClick={() => setMostrarModalManual(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-stone-200 hover:border-stone-300 bg-white hover:bg-stone-50 text-xs font-semibold text-stone-700 transition cursor-pointer"
+                title="Colar ou digitar texto"
+              >
+                <Plus className="w-4 h-4 text-stone-500" />
+                <span className="hidden md:inline">Texto</span>
+              </button>
+
               {!isProcessing ? (
                 <button
                   onClick={startProcessing}
                   disabled={items.length === 0 || (totalPendentes === 0 && totalErros === 0)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-extrabold py-2.5 px-4 rounded-xl text-xs sm:text-sm transition shadow-xs cursor-pointer disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#2A6F73] hover:bg-[#21585B] disabled:opacity-35 text-white text-xs font-bold transition shadow-2xs cursor-pointer disabled:cursor-not-allowed"
                 >
-                  <Play className="w-4 h-4 fill-white" />
-                  {totalConcluidos > 0 && totalPendentes > 0 ? 'Continuar Lote' : 'Iniciar Correções'}
+                  <Play className="w-3.5 h-3.5 fill-white" />
+                  Corrigir {totalPendentes + totalErros > 0 ? `(${totalPendentes + totalErros})` : ''}
                 </button>
               ) : (
                 <button
                   onClick={stopProcessing}
-                  className="flex-1 flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-xs sm:text-sm transition shadow-xs cursor-pointer"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C96442] hover:bg-[#b05536] text-white text-xs font-bold transition shadow-2xs cursor-pointer"
                 >
-                  <Pause className="w-4 h-4" />
-                  Pausar Fila
+                  <Pause className="w-3.5 h-3.5" />
+                  Pausar
                 </button>
               )}
-
-              <button
-                onClick={startProcessing}
-                title="Reprocessar pendentes ou com erro"
-                className="p-2.5 text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl border border-slate-200 transition cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleLimparLote}
-                title="Limpar todo o lote"
-                className="p-2.5 text-slate-700 hover:text-red-700 hover:bg-red-50 rounded-xl border border-slate-200 transition cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
             </div>
           </div>
         </div>
 
-        {/* 4 Cards de Estatísticas Executivas */}
-        {items.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-2xs flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-500">Volume do Lote</span>
-                <div className="text-2xl font-black text-slate-950 mt-0.5">{items.length} redações</div>
-                <span className="text-[11px] font-semibold text-slate-500">
-                  {totalPendentes} na fila • {totalErros} falhas
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
-                <FileText className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-2xs flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-500">Concluídas com Sucesso</span>
-                <div className="text-2xl font-black text-emerald-700 mt-0.5">{totalConcluidos}</div>
-                <span className="text-[11px] font-semibold text-emerald-700">
-                  100% validadas contra alucinação
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-2xs flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-500">Média Geral do Lote</span>
-                <div className="text-2xl font-black text-indigo-700 mt-0.5">{mediaNotas} pts</div>
-                <span className="text-[11px] font-semibold text-slate-500">
-                  Maior nota: <strong className="text-slate-800">{maiorNota} pts</strong>
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5" />
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200/90 p-4 rounded-2xl shadow-2xs flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-500">Consumo de Tokens</span>
-                <div className="text-2xl font-black text-slate-900 mt-0.5">
-                  {totalTokens.toLocaleString('pt-BR')}
-                </div>
-                <span className="text-[11px] font-semibold text-slate-500">
-                  ~{mediaTokensPorRedacao.toLocaleString('pt-BR')} tokens/redação
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                <Sparkles className="w-5 h-5" />
-              </div>
-            </div>
+        {/* Estado Vazio com o Mascote (Dropzone Unificada) */}
+        {items.length === 0 ? (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`bg-white border-2 border-dashed rounded-3xl p-12 text-center cursor-pointer transition flex flex-col items-center justify-center ${
+              isDragging
+                ? 'border-teal-600 bg-teal-50/20'
+                : 'border-stone-200 hover:border-stone-300'
+            }`}
+          >
+            <img
+              src="/mascote.jpg"
+              alt="Mascote Corretor"
+              className="w-36 h-36 object-contain mb-3 select-none"
+            />
+            <h2 className="text-base font-bold text-stone-800">
+              Solte suas redações aqui ou clique para importar
+            </h2>
+            <p className="text-xs text-stone-500 mt-1 max-w-md">
+              Aceita planilhas (<strong>XLSX, CSV</strong>), fotos de folhas manuscritas (<strong>JPG, PNG, PDF</strong>) ou arquivos <strong>TXT</strong>.
+            </p>
           </div>
-        )}
-
-        {/* Tabela Principal de Resultados */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
-          {/* Barra de Ferramentas da Tabela */}
-          <div className="p-4 sm:px-6 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-slate-50/50">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-extrabold text-slate-950 text-sm mr-2">Espelhos de Correção</h3>
-              {[
-                { key: 'todos', label: `Todas (${items.length})` },
-                { key: 'concluido', label: `Concluídas (${totalConcluidos})` },
-                { key: 'pendente', label: `Pendentes (${totalPendentes})` },
-                { key: 'erro', label: `Erros (${totalErros})` },
-              ].map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setFiltroStatus(tab.key as any)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    filtroStatus === tab.key
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2.5">
-              {items.length > 0 && (
-                <div className="relative flex-1 sm:w-56">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Buscar candidato..."
-                    value={buscaAluno}
-                    onChange={(e) => setBuscaAluno(e.target.value)}
-                    className="w-full text-xs font-medium pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              )}
-
-              {totalConcluidos > 0 && (
-                <button
-                  onClick={exportarPlanilhaResultados}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-extrabold shadow-2xs transition cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Exportar Planilha (XLSX)
-                </button>
-              )}
-            </div>
-          </div>
-
-          {items.length === 0 ? (
-            <div className="p-14 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                <FileSpreadsheet className="w-6 h-6" />
+        ) : (
+          /* Lista Minimalista de Redações */
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            className="bg-white border border-stone-200/90 rounded-2xl shadow-2xs overflow-hidden"
+          >
+            {/* Barra de Resumo Compacta */}
+            <div className="px-5 py-3.5 border-b border-stone-100 flex flex-wrap items-center justify-between gap-3 bg-stone-50/40">
+              <div className="flex items-center gap-4 text-xs text-stone-600">
+                <span>
+                  <strong className="text-stone-900">{totalConcluidos}</strong> de{' '}
+                  <strong className="text-stone-900">{items.length}</strong> corrigidas
+                </span>
+                {totalConcluidos > 0 && (
+                  <>
+                    <span className="text-stone-300">•</span>
+                    <span>
+                      Média: <strong className="text-teal-800">{mediaNotas} pts</strong>
+                    </span>
+                  </>
+                )}
+                {totalTokens > 0 && (
+                  <>
+                    <span className="text-stone-300 hidden sm:inline">•</span>
+                    <span className="hidden sm:inline text-stone-400">
+                      {totalTokens.toLocaleString('pt-BR')} tokens
+                    </span>
+                  </>
+                )}
               </div>
-              <div className="max-w-sm mx-auto">
-                <h4 className="text-sm font-extrabold text-slate-800">Nenhuma redação na fila</h4>
-                <p className="text-xs text-slate-500 mt-1">
-                  Importe uma planilha Excel/CSV, envie fotos de folhas manuscritas ou clique em "Digitar Redação Avulsa" no topo.
-                </p>
+
+              <div className="flex items-center gap-2">
+                {items.length > 3 && (
+                  <div className="relative w-44">
+                    <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Buscar..."
+                      value={buscaAluno}
+                      onChange={(e) => setBuscaAluno(e.target.value)}
+                      className="w-full text-xs pl-8 pr-2.5 py-1 rounded-lg border border-stone-200 focus:outline-none focus:border-teal-700"
+                    />
+                  </div>
+                )}
+
+                {totalConcluidos > 0 && (
+                  <button
+                    onClick={exportarPlanilhaResultados}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold transition cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Exportar XLSX
+                  </button>
+                )}
+
+                <button
+                  onClick={handleLimparLote}
+                  title="Limpar lista"
+                  className="p-1.5 text-stone-400 hover:text-red-600 rounded-lg transition cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
-          ) : (
+
+            {/* Tabela Limpa */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-600 font-extrabold uppercase tracking-wider text-[11px] border-b border-slate-200">
+                <thead className="text-stone-400 font-semibold border-b border-stone-100 text-[11px] uppercase tracking-wider">
                   <tr>
-                    <th className="py-3.5 px-5">Candidato / Arquivo</th>
-                    <th className="py-3.5 px-3">Entrada</th>
-                    <th className="py-3.5 px-3">Status</th>
-                    <th className="py-3.5 px-2 text-center" title="Competência I: Norma-Padrão">
-                      <span className="inline-block w-2 h-2 rounded-full bg-fuchsia-700 mr-1" />
-                      C1
-                    </th>
-                    <th className="py-3.5 px-2 text-center" title="Competência II: Tema e Repertório">
-                      <span className="inline-block w-2 h-2 rounded-full bg-rose-700 mr-1" />
-                      C2
-                    </th>
-                    <th className="py-3.5 px-2 text-center" title="Competência III: Projeto e Argumentação">
-                      <span className="inline-block w-2 h-2 rounded-full bg-sky-700 mr-1" />
-                      C3
-                    </th>
-                    <th className="py-3.5 px-2 text-center" title="Competência IV: Coesão">
-                      <span className="inline-block w-2 h-2 rounded-full bg-amber-600 mr-1" />
-                      C4
-                    </th>
-                    <th className="py-3.5 px-2 text-center" title="Competência V: Proposta de Intervenção">
-                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-700 mr-1" />
-                      C5
-                    </th>
-                    <th className="py-3.5 px-4 text-right">Nota Final</th>
-                    <th className="py-3.5 px-5 text-right">Ações</th>
+                    <th className="py-3 px-5">Candidato</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-2 text-center">C1</th>
+                    <th className="py-3 px-2 text-center">C2</th>
+                    <th className="py-3 px-2 text-center">C3</th>
+                    <th className="py-3 px-2 text-center">C4</th>
+                    <th className="py-3 px-2 text-center">C5</th>
+                    <th className="py-3 px-4 text-right">Nota</th>
+                    <th className="py-3 px-5 text-right"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200/80 text-slate-800 font-medium">
+                <tbody className="divide-y divide-stone-100 text-stone-700">
                   {itensFiltrados.map((item) => {
                     const r = item.resultado;
                     return (
@@ -882,109 +664,85 @@ export default function BatchWorkspace() {
                         key={item.id}
                         onClick={() => r && setSelectedItemForModal(item)}
                         className={`transition ${
-                          r ? 'hover:bg-indigo-50/40 cursor-pointer' : 'hover:bg-slate-50'
+                          r ? 'hover:bg-stone-50/90 cursor-pointer' : 'hover:bg-stone-50/40'
                         }`}
                       >
-                        <td className="py-3.5 px-5 font-bold text-slate-950 max-w-xs truncate">
-                          {item.identificadorAluno}
-                        </td>
-                        <td className="py-3.5 px-3">
+                        <td className="py-3.5 px-5 font-semibold text-stone-900 flex items-center gap-2">
                           {item.modalidade === 'handwritten_media' ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
-                              <ImageIcon className="w-3 h-3 text-slate-500" /> Manuscrito
-                            </span>
+                            <ImageIcon className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-                              <FileText className="w-3 h-3 text-slate-400" /> Texto
-                            </span>
+                            <FileText className="w-3.5 h-3.5 text-stone-400 shrink-0" />
                           )}
+                          <span className="truncate max-w-xs">{item.identificadorAluno}</span>
                         </td>
                         <td className="py-3.5 px-3">
                           {item.status === 'pendente' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full font-bold">
-                              <Clock className="w-3 h-3 text-slate-400" /> Na fila
+                            <span className="inline-flex items-center gap-1 text-stone-400">
+                              <Clock className="w-3 h-3" /> Na fila
                             </span>
                           )}
                           {item.status === 'processando' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full font-bold animate-pulse">
-                              <RotateCcw className="w-3 h-3 animate-spin text-indigo-600" /> Avaliando...
+                            <span className="inline-flex items-center gap-1 text-teal-700 font-medium animate-pulse">
+                              <RotateCcw className="w-3 h-3 animate-spin" /> Corrigindo...
                             </span>
                           )}
                           {item.status === 'concluido' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full font-bold">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Auditado
+                            <span className="inline-flex items-center gap-1 text-teal-700 font-medium">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Concluída
                             </span>
                           )}
                           {item.status === 'erro' && (
                             <span
                               title={item.erroMensagem}
-                              className="inline-flex items-center gap-1 text-[11px] text-red-800 bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full font-bold cursor-help"
+                              className="inline-flex items-center gap-1 text-red-600 font-medium cursor-help"
                             >
-                              <AlertCircle className="w-3 h-3 text-red-600" /> Falha
+                              <AlertCircle className="w-3.5 h-3.5" /> Erro
                             </span>
                           )}
                         </td>
-                        <td className="py-3.5 px-2 text-center">
-                          {renderScorePill(r?.c1.pontos, r?.c1.travas_acionadas)}
+                        <td className="py-3.5 px-2 text-center font-mono text-stone-600">
+                          {r ? r.c1.pontos : '—'}
                         </td>
-                        <td className="py-3.5 px-2 text-center">
-                          {renderScorePill(r?.c2.pontos, r?.c2.travas_acionadas)}
+                        <td className="py-3.5 px-2 text-center font-mono text-stone-600">
+                          {r ? r.c2.pontos : '—'}
                         </td>
-                        <td className="py-3.5 px-2 text-center">
-                          {renderScorePill(r?.c3.pontos, r?.c3.travas_acionadas)}
+                        <td className="py-3.5 px-2 text-center font-mono text-stone-600">
+                          {r ? r.c3.pontos : '—'}
                         </td>
-                        <td className="py-3.5 px-2 text-center">
-                          {renderScorePill(r?.c4.pontos, r?.c4.travas_acionadas)}
+                        <td className="py-3.5 px-2 text-center font-mono text-stone-600">
+                          {r ? r.c4.pontos : '—'}
                         </td>
-                        <td className="py-3.5 px-2 text-center">
-                          {renderScorePill(r?.c5.pontos, r?.c5.travas_acionadas)}
+                        <td className="py-3.5 px-2 text-center font-mono text-stone-600">
+                          {r ? r.c5.pontos : '—'}
                         </td>
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3.5 px-4 text-right font-bold text-sm">
                           {r ? (
-                            <span
-                              className={`inline-block font-black text-sm px-2.5 py-0.5 rounded-lg ${
-                                r.anulada
-                                  ? 'bg-red-100 text-red-800'
-                                  : r.nota_total >= 900
-                                  ? 'bg-emerald-100 text-emerald-900'
-                                  : 'text-slate-950'
-                              }`}
-                            >
-                              {r.anulada ? '0 (Anulada)' : r.nota_total}
+                            <span className={r.anulada ? 'text-red-600' : 'text-stone-900'}>
+                              {r.anulada ? '0' : r.nota_total}
                             </span>
                           ) : (
-                            <span className="text-slate-300">—</span>
+                            <span className="text-stone-300">—</span>
                           )}
                         </td>
                         <td
                           className="py-3.5 px-5 text-right"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="inline-flex items-center justify-end gap-1">
-                            {r && (
-                              <button
-                                onClick={() => setSelectedItemForModal(item)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition cursor-pointer"
-                                title="Abrir Espelho Oficial de Correção"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                Espelho
-                              </button>
-                            )}
+                          <div className="inline-flex items-center gap-1">
                             <button
                               onClick={() => processarUnicoItem(item)}
                               disabled={item.status === 'processando'}
-                              className="p-1.5 text-slate-500 hover:text-indigo-700 hover:bg-slate-100 rounded-lg transition cursor-pointer disabled:opacity-40"
-                              title="Reprocessar esta redação"
+                              className="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg transition cursor-pointer"
+                              title="Reprocessar"
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleRemoverItem(item.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
-                              title="Remover da lista"
+                              className="p-1.5 text-stone-300 hover:text-red-600 rounded-lg transition cursor-pointer"
+                              title="Remover"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -994,67 +752,157 @@ export default function BatchWorkspace() {
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Modal de Inserção de Redação Avulsa */}
+      {/* Menu Modal de Configurações (API Key, Seletor de Modelo, Concorrência e Textos Motivadores) */}
+      {mostrarConfig && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4 backdrop-blur-xs"
+          onClick={() => setMostrarConfig(false)}
+        >
+          <div
+            className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-stone-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <img src="/mascote.jpg" alt="" className="w-7 h-7 rounded-full object-cover" />
+                <h3 className="font-bold text-sm text-stone-900">Configurações</h3>
+              </div>
+              <button
+                onClick={() => setMostrarConfig(false)}
+                className="p-1 text-stone-400 hover:text-stone-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">
+                  Chave da Gemini API
+                </label>
+                <input
+                  type="password"
+                  placeholder="Cole sua chave AIza..."
+                  value={apiKey}
+                  onChange={(e) => salvarChave(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-teal-700"
+                />
+                <p className="text-[11px] text-stone-400 mt-1">
+                  Salva localmente no navegador (opcional se configurada no servidor).
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Modelo Gemini
+                  </label>
+                  <select
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-teal-700 cursor-pointer"
+                  >
+                    <option value="gemini-3.8-flash">gemini-3.8-flash</option>
+                    <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+                    <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+                    <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                    <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Correções simultâneas
+                  </label>
+                  <select
+                    value={concorrencia}
+                    onChange={(e) => setConcorrencia(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-teal-700 cursor-pointer"
+                  >
+                    <option value={1}>1 por vez</option>
+                    <option value={3}>3 simultâneas</option>
+                    <option value={5}>5 simultâneas</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">
+                  Textos Motivadores (opcional, para detector de cópia)
+                </label>
+                <textarea
+                  rows={3}
+                  value={textosMotivadores}
+                  onChange={(e) => setTextosMotivadores(e.target.value)}
+                  placeholder="Cole os textos motivadores da proposta se desejar auditar cópia..."
+                  className="w-full p-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-teal-700"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={() => setMostrarConfig(false)}
+                  className="px-5 py-2 rounded-xl bg-[#2A6F73] hover:bg-[#21585B] text-white font-semibold transition cursor-pointer"
+                >
+                  Pronto
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Texto Avulso */}
       {mostrarModalManual && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4 backdrop-blur-xs"
           onClick={() => setMostrarModalManual(false)}
         >
           <div
-            className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+            className="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-stone-200 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-              <h3 className="font-extrabold text-base">Adicionar Redação Avulsa</h3>
+            <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between">
+              <h3 className="font-bold text-sm text-stone-900">Adicionar Redação em Texto</h3>
               <button
                 onClick={() => setMostrarModalManual(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+                className="p-1 text-stone-400 hover:text-stone-700 rounded-lg cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-extrabold text-slate-800 mb-1">
-                  Nome ou Identificador do Candidato:
-                </label>
-                <input
-                  type="text"
-                  value={novoAlunoManual}
-                  onChange={(e) => setNovoAlunoManual(e.target.value)}
-                  placeholder="Ex: Maria Silva - Turma 3º A"
-                  className="w-full text-xs font-semibold p-2.5 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-extrabold text-slate-800 mb-1">
-                  Texto da Redação (separe os parágrafos com Enter):
-                </label>
-                <textarea
-                  rows={10}
-                  value={novoTextoManual}
-                  onChange={(e) => setNovoTextoManual(e.target.value)}
-                  placeholder="Cole ou digite aqui o texto integral da redação..."
-                  className="w-full text-xs font-mono p-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
+            <div className="p-6 space-y-3 text-xs">
+              <input
+                type="text"
+                value={novoAlunoManual}
+                onChange={(e) => setNovoAlunoManual(e.target.value)}
+                placeholder="Nome do aluno (opcional)"
+                className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:border-teal-700"
+              />
+              <textarea
+                rows={8}
+                value={novoTextoManual}
+                onChange={(e) => setNovoTextoManual(e.target.value)}
+                placeholder="Cole o texto da redação aqui..."
+                className="w-full p-3 border border-stone-200 rounded-xl focus:outline-none focus:border-teal-700"
+              />
+              <div className="flex justify-end gap-2 pt-1">
                 <button
                   onClick={() => setMostrarModalManual(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  className="px-4 py-2 text-stone-500 hover:bg-stone-100 rounded-xl cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleAdicionarManual}
                   disabled={!novoTextoManual.trim()}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-extrabold rounded-xl shadow-xs cursor-pointer"
+                  className="px-5 py-2 bg-[#2A6F73] hover:bg-[#21585B] disabled:opacity-40 text-white font-semibold rounded-xl cursor-pointer"
                 >
-                  Adicionar à Fila
+                  Adicionar
                 </button>
               </div>
             </div>

@@ -99,19 +99,21 @@ export default function StudentScoreModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Action Bar */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between print:hidden border-b border-slate-800">
+        <div className="bg-white text-stone-900 px-6 py-4 flex items-center justify-between print:hidden border-b border-stone-200">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-sm shadow-inner">
-              E25
-            </div>
+            <img
+              src="/mascote.jpg"
+              alt="Mascote"
+              className="w-10 h-10 rounded-xl object-cover border border-stone-200 shadow-xs"
+            />
             <div>
-              <h2 className="text-base sm:text-lg font-extrabold tracking-tight">
-                Espelho Oficial de Avaliação — Grade ENEM 2025
+              <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-stone-900">
+                Espelho de Avaliação — ENEM
               </h2>
-              <p className="text-xs text-slate-400">
-                Candidato(a): <span className="text-slate-200 font-semibold">{alunoNome}</span>
+              <p className="text-xs text-stone-500">
+                <span className="text-stone-800 font-semibold">{alunoNome}</span>
                 {typeof ev?.total_linhas_manuscritas === 'number' && ev.total_linhas_manuscritas > 0 && (
-                  <span className="ml-2 px-2 py-0.5 bg-slate-800 rounded text-slate-300">
+                  <span className="ml-2 px-2 py-0.5 bg-stone-100 rounded text-stone-600 font-medium">
                     {ev.total_linhas_manuscritas} linhas manuscritas
                   </span>
                 )}
@@ -122,14 +124,14 @@ export default function StudentScoreModal({
           <div className="flex items-center gap-2">
             <button
               onClick={imprimirEspelho}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-bold rounded-xl text-white transition cursor-pointer shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-xs font-bold rounded-xl text-white transition cursor-pointer shadow-xs"
             >
               <Printer className="w-4 h-4" />
-              Imprimir / Salvar PDF
+              Imprimir / PDF
             </button>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition cursor-pointer"
+              className="p-2 hover:bg-stone-100 rounded-xl text-stone-500 hover:text-stone-900 transition cursor-pointer"
               title="Fechar (Esc)"
             >
               <X className="w-5 h-5" />
