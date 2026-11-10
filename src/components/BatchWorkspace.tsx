@@ -69,17 +69,7 @@ export default function BatchWorkspace() {
             const evOriginal = { ...it.resultado.evidencias_auditadas };
             const textoRef = it.texto || evOriginal.transcricao || '';
 
-            if (evOriginal.proposta_intervencao) {
-              const prop = { ...evOriginal.proposta_intervencao };
-              for (const k of ['agente', 'acao', 'meio_modo', 'efeito', 'detalhamento'] as const) {
-                const el = prop[k];
-                if (el && el.trecho && el.trecho.trim().length > 0 && !(el as any).nulo_motivo) {
-                  prop[k] = { ...el, valido: true };
-                }
-              }
-              evOriginal.proposta_intervencao = prop;
-            }
-
+            // Revalida fielmente com o validador anti-alucinação sem inflar arbitrariamente a C5
             const { evidenciasSaneadas } = validarEvidenciasAntiAlucinacao(
               textoRef,
               evOriginal,
@@ -126,16 +116,20 @@ export default function BatchWorkspace() {
         const itensPlanilha = await lerPlanilha(file);
         novosItens.push(...itensPlanilha);
       } else if (file.type.startsWith('image/') || file.type === 'application/pdf' || ext === 'pdf') {
-        const { base64, mimeType } = await prepararMidiaOtimizada(file);
-        novosItens.push({
-          id: `media-${Date.now()}-${i}`,
-          identificadorAluno: file.name.replace(/\.[^/.]+$/, ''),
-          modalidade: 'handwritten_media',
-          imagemBase64: base64,
-          mimeType,
-          tema,
-          status: 'pendente',
-        });
+        try {
+          const { base64, mimeType } = await prepararMidiaOtimizada(file);
+          novosItens.push({
+            id: `media-${Date.now()}-${i}`,
+            identificadorAluno: file.name.replace(/\.[^/.]+$/, ''),
+            modalidade: 'handwritten_media',
+            imagemBase64: base64,
+            mimeType,
+            tema,
+            status: 'pendente',
+          });
+        } catch (err: any) {
+          alert(err.message || `Erro ao preparar o arquivo ${file.name}`);
+        }
       } else {
         const text = await file.text();
         novosItens.push({
@@ -150,9 +144,11 @@ export default function BatchWorkspace() {
     }
 
     if (novosItens.length > 0) {
-      const itensAtualizados = [...items, ...novosItens];
-      setItems(itensAtualizados);
-      await salvarLoteBatch(itensAtualizados);
+      setItems((prev) => {
+        const itensAtualizados = [...prev, ...novosItens];
+        salvarLoteBatch(itensAtualizados);
+        return itensAtualizados;
+      });
     }
   };
 
@@ -216,9 +212,11 @@ export default function BatchWorkspace() {
       tema,
       status: 'pendente',
     };
-    const atualizados = [novoItem, ...items];
-    setItems(atualizados);
-    await salvarLoteBatch(atualizados);
+    setItems((prev) => {
+      const atualizados = [novoItem, ...prev];
+      salvarLoteBatch(atualizados);
+      return atualizados;
+    });
     setNovoAlunoManual('');
     setNovoTextoManual('');
     setMostrarModalManual(false);
@@ -233,16 +231,29 @@ export default function BatchWorkspace() {
     });
 
   const prepararMidiaOtimizada = async (file: File): Promise<{ base64: string; mimeType: string }> => {
-    if (!file.type.startsWith('image/') || file.size <= 1.5 * 1024 * 1024) {
+    // Se for PDF, validar limite máximo seguro para a Vercel (limite 4.5MB com base64 ~3.2MB)
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      const maxPdfBytes = 3.2 * 1024 * 1024;
+      if (file.size > maxPdfBytes) {
+        throw new Error(
+          `O PDF "${file.name}" tem ${(file.size / (1024 * 1024)).toFixed(1)}MB e excede o limite de 3.2MB suportado na Vercel sem compressão. Por favor, comprima o PDF ou envie como imagens JPG/PNG.`
+        );
+      }
       return { base64: await toBase64(file), mimeType: file.type || 'application/pdf' };
     }
 
+    // Se for imagem pequena (< 800KB), envia direto
+    if (!file.type.startsWith('image/') || file.size <= 800 * 1024) {
+      return { base64: await toBase64(file), mimeType: file.type || 'image/jpeg' };
+    }
+
+    // Otimização e compressão de fotos/manuscritos com Canvas no navegador
     return new Promise((resolve) => {
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(url);
-        const MAX_DIM = 1800;
+        const MAX_DIM = 1600;
         let { width, height } = img;
         if (width > MAX_DIM || height > MAX_DIM) {
           const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
@@ -258,7 +269,7 @@ export default function BatchWorkspace() {
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.84);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.82);
         resolve({ base64: compressedBase64, mimeType: 'image/jpeg' });
       };
       img.onerror = async () => {
@@ -287,6 +298,15 @@ export default function BatchWorkspace() {
           modelName,
         }),
       });
+
+      const contentType = resp.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const text = await resp.text();
+        if (resp.status === 413 || text.includes('413') || text.includes('Payload Too Large')) {
+          throw new Error('Arquivo muito pesado (limite de 4.5MB do servidor excedido). Comprima a imagem ou reduza o PDF.');
+        }
+        throw new Error(`Erro de resposta do servidor (${resp.status}): ${text.slice(0, 150)}`);
+      }
 
       const data = await resp.json();
       if (!resp.ok) {

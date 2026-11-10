@@ -169,12 +169,12 @@ export async function POST(req: NextRequest) {
     let response: any;
     let lastError: any;
     let modeloUtilizado = modelName;
+    // Fallback apenas entre modelos flash ultra-rápidos e econômicos (evita Pro inesperado)
     const catalogoFallback = [
       'gemini-3.8-flash',
       'gemini-3.5-flash-lite',
       'gemini-3-flash-preview',
       'gemini-3.1-flash-lite',
-      'gemini-3.1-pro-preview',
     ];
     const modelosParaTentar = [
       modelName,
@@ -262,9 +262,25 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('Erro na avaliação da redação:', error);
+
+    const msg = error?.message || '';
+    let httpStatus = 500;
+    let erroLegivel = msg || 'Erro interno ao processar a correção da redação.';
+
+    if (error?.status === 429 || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.toLowerCase().includes('quota')) {
+      httpStatus = 429;
+      erroLegivel = 'Limite de requisições ou cota gratuita da API Gemini atingido. Aguarde 1 minuto ou selecione outro modelo nas Configurações.';
+    } else if (error?.status === 503 || msg.includes('503') || msg.toLowerCase().includes('high demand') || msg.toLowerCase().includes('overloaded')) {
+      httpStatus = 503;
+      erroLegivel = 'Servidores da API Gemini temporariamente sobrecarregados (503). O sistema tentou fallback automático, tente novamente em instantes.';
+    } else if (error?.status === 400 || msg.toLowerCase().includes('api key not valid') || msg.toLowerCase().includes('api_key_invalid')) {
+      httpStatus = 400;
+      erroLegivel = 'Chave da API Gemini inválida ou sem permissão. Verifique a chave inserida no menu de Configurações.';
+    }
+
     return NextResponse.json(
-      { error: error?.message || 'Erro interno ao processar a correção da redação.' },
-      { status: 500 }
+      { error: erroLegivel, details: msg },
+      { status: httpStatus }
     );
   }
 }
