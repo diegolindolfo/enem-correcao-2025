@@ -312,7 +312,12 @@ export default function StudentScoreModal({
                             {d.tipo}
                           </span>
                         </div>
-                        <span className="text-slate-600 mt-1">{d.explicacao_curta}</span>
+                        <span className="text-slate-600 mt-1">
+                          {d.forma_correta && (
+                            <span className="font-semibold text-emerald-700 mr-1">→ {d.forma_correta}.</span>
+                          )}
+                          {d.explicacao_curta}
+                        </span>
                       </li>
                     ))}
                   </ul>

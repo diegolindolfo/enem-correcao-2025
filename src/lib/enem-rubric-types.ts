@@ -30,6 +30,7 @@ export type InputModality = 'text' | 'handwritten_media';
 
 export interface DesvioItem {
   trecho_original: string;
+  forma_correta?: string;
   tipo: 'gramatical' | 'ortografia' | 'pontuacao' | 'escolha_vocabular' | 'convencoes_escrita';
   explicacao_curta: string;
 }

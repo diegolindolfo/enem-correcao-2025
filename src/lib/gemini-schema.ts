@@ -9,7 +9,7 @@ export const ENEM_EVIDENCE_RESPONSE_SCHEMA: Schema = {
   properties: {
     transcricao: {
       type: Type.STRING,
-      description: 'Transcrição literal e integral do texto (quando a entrada for imagem ou PDF manuscrito). Deixe vazio se já for texto digitado.',
+      description: 'Transcrição literal e integral do texto (quando a entrada for imagem ou PDF manuscrito), PRESERVANDO todos os erros do candidato (grafia, acentuação, pontuação, maiúsculas) sem corrigir nada. Palavras divididas na troca de linha (ex.: "sa-" + "crifícios") devem ser unidas sem hífen ("sacrifícios"). Separe parágrafos com quebra de linha. Deixe vazio se já for texto digitado.',
     },
     total_linhas_manuscritas: {
       type: Type.INTEGER,
@@ -72,13 +72,17 @@ export const ENEM_EVIDENCE_RESPONSE_SCHEMA: Schema = {
         type: Type.OBJECT,
         properties: {
           trecho_original: { type: Type.STRING, description: 'Citação LITERAL da palavra/termo com erro.' },
+          forma_correta: {
+            type: Type.STRING,
+            description: 'Reescrita do MESMO trecho na forma correta da norma-padrão. Precisa ser diferente do trecho original. Se você não consegue escrever uma forma correta diferente, NÃO registre o desvio.',
+          },
           tipo: {
             type: Type.STRING,
             enum: ['gramatical', 'ortografia', 'pontuacao', 'escolha_vocabular', 'convencoes_escrita'],
           },
           explicacao_curta: { type: Type.STRING },
         },
-        required: ['trecho_original', 'tipo'],
+        required: ['trecho_original', 'forma_correta', 'tipo'],
       },
     },
     abordagem_tema: {
@@ -226,7 +230,10 @@ REGRAS DE EXTRAÇÃO:
 1. DESVIOS E FALHAS SINTÁTICAS (C1):
    - Cite apenas palavras ou trechos que REALMENTE contenham erro gramatical, de concordância, regência, pontuação, crase, ortografia ou convenções da escrita.
    - O campo "trecho_original" DEVE ser uma cópia literal idêntica à grafia do candidato.
+   - Para cada desvio, preencha "forma_correta" com o mesmo trecho corrigido. Se a forma correta for igual ao original, não é desvio: não registre.
+   - Concordância: antes de apontar, identifique o núcleo do sujeito. Verbos coordenados com o mesmo sujeito singular ("X perpetua ... e desumaniza ...") estão CORRETOS.
    - Não invente erros e não aponte estilo pessoal como desvio.
+   - Na transcrição de manuscritos, NUNCA corrija a grafia do candidato: um erro corrigido na transcrição é um desvio perdido.
 
 2. TEMA E TIPO TEXTUAL (C2):
    - Classifique se o texto aborda o tema integralmente ("completa"), se apenas tangencia o tema ("tangencia") ou se foge completamente ("fuga").

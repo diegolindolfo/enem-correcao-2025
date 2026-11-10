@@ -86,11 +86,26 @@ export interface ValidationSummary {
   avisosAuditoria: string[];
 }
 
+/**
+ * Une palavras divididas na troca de linha ("sa-\ncrifícios" -> "sacrifícios").
+ */
+export function unirTranslineacao(texto: string): string {
+  return (texto || '').replace(/(\p{L})-[ \t]*\r?\n[ \t]*(\p{L})/gu, '$1$2');
+}
+
+/**
+ * Compara mantendo acentos e pontuação (para não confundir "errôneamente" com "erroneamente").
+ */
+function normalizarParaComparacao(texto: string): string {
+  return (texto || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 export function validarEvidenciasAntiAlucinacao(
-  textoRedacao: string,
+  textoRedacaoBruto: string,
   rawEvidence: ExtractedEvidence,
   modalidade: InputModality = 'text'
 ): ValidationSummary {
+  const textoRedacao = unirTranslineacao(textoRedacaoBruto);
   const textoSimples = simplificar(textoRedacao);
   const avisosAuditoria: string[] = [];
   const desviosValidados: DesvioItem[] = [];
@@ -102,7 +117,18 @@ export function validarEvidenciasAntiAlucinacao(
     for (const d of rawEvidence.desvios_identificados) {
       if (!d?.trecho_original || d.trecho_original.trim().length === 0) continue;
 
-      if (trechoExisteNoTexto(textoSimples, d.trecho_original, false)) {
+      // Falso positivo: a "correção" proposta é idêntica ao que o candidato escreveu
+      if (
+        typeof d.forma_correta === 'string' &&
+        d.forma_correta.trim().length > 0 &&
+        normalizarParaComparacao(d.forma_correta) === normalizarParaComparacao(d.trecho_original)
+      ) {
+        desviosDescartadosPorAlucinacao.push(d);
+        avisosAuditoria.push(`Desvio descartado: a forma correta proposta é idêntica ao original ("${d.trecho_original}").`);
+        continue;
+      }
+
+      if (trechoExisteNoTexto(textoSimples, unirTranslineacao(d.trecho_original), false)) {
         desviosValidados.push(d);
       } else {
         desviosDescartadosPorAlucinacao.push(d);
