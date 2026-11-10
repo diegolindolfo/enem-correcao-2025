@@ -132,6 +132,13 @@ export function validarEvidenciasAntiAlucinacao(
     for (const d of rawEvidence.desvios_identificados) {
       if (!d?.trecho_original || d.trecho_original.trim().length === 0) continue;
 
+      // Filtro de citação mínima: impede que um trecho isolado de 1 letra ("a", "e") case falsamente em qualquer palavra
+      if (simplificar(d.trecho_original).length < 2) {
+        desviosDescartadosPorAlucinacao.push(d);
+        avisosAuditoria.push(`Desvio descartado por citação curta/ambígua demais ("${d.trecho_original}").`);
+        continue;
+      }
+
       // Falso positivo: a "correção" proposta é idêntica ao que o candidato escreveu
       if (
         typeof d.forma_correta === 'string' &&

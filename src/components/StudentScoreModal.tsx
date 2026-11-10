@@ -429,10 +429,17 @@ export default function StudentScoreModal({
             >
               {textoOriginal && (
                 <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/70">
-                  <h4 className="font-extrabold text-slate-900 text-sm mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-700" />
-                    {imagemUrl ? 'Transcrição Fiel da Folha Manuscrita' : 'Texto Integral da Redação'}
-                  </h4>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-indigo-700" />
+                      {imagemUrl ? 'Transcrição Fiel da Folha Manuscrita' : 'Texto Integral da Redação'}
+                    </h4>
+                    {imagemUrl && (
+                      <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                        Transcrição automática — confira a grafia na folha ao lado
+                      </span>
+                    )}
+                  </div>
                   <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-mono whitespace-pre-wrap leading-relaxed text-slate-800 max-h-96 overflow-y-auto print:max-h-none">
                     {textoOriginal}
                   </div>

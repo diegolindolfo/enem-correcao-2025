@@ -812,7 +812,7 @@ export default function BatchWorkspace() {
                   className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-teal-700"
                 />
                 <p className="text-[11px] text-stone-400 mt-1">
-                  Salva localmente no navegador (opcional se configurada no servidor).
+                  Salva exclusivamente neste navegador (localStorage) — nunca armazenada no servidor.
                 </p>
               </div>
 

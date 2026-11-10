@@ -237,7 +237,7 @@ REGRAS DE EXTRAÇÃO:
      d) Concordância verbal e nominal (ex.: "a fase final... e morte são retratados" -> "são retratadas"; "tem-se... perspectivas contrastantes" -> "têm-se"; "muitas pessoas maltrata" -> "maltratam"; "eles também cuidou" -> "cuidaram"; "nos maltrata e judeia" -> "maltratam e judiam"; "como se fosse nós mesmos" -> "fôssemos");
      e) Regência e colocação pronominal (ex.: "maltratar da gente" -> "maltratar a gente"; "corrigíamos eles" -> "os corrigíamos"; próclise obrigatória após conjunção subordinativa ou pronome relativo: "uma vez que tem-se" -> "uma vez que se tem", "o qual ambienta-se" -> "o qual se ambienta");
      f) Pontuação (ex.: vírgula antes de travessão ", -", vírgula unindo orações independentes sem conjunção adequada).
-   - O campo "trecho_original" DEVE ser uma cópia literal idêntica à grafia do candidato.
+   - O campo "trecho_original" DEVE ser uma cópia literal idêntica à grafia do candidato (inclua pelo menos 2 palavras quando o desvio envolver crase, pontuação ou monossílabo como "a" ou "e", ex.: "ir a praia" -> "ir à praia").
    - Para cada desvio, preencha "forma_correta" com o mesmo trecho corrigido. Se a forma correta for igual ao original, não é desvio: não registre.
    - Concordância: antes de apontar, identifique o núcleo do sujeito. Verbos coordenados com o mesmo sujeito singular ("X perpetua ... e desumaniza ...") estão CORRETOS.
    - Na transcrição de manuscritos, NUNCA corrija a grafia do candidato: um erro corrigido na transcrição é um desvio perdido.
