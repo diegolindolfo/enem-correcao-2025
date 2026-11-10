@@ -88,11 +88,13 @@ export const ENEM_EVIDENCE_RESPONSE_SCHEMA: Schema = {
     abordagem_tema: {
       type: Type.STRING,
       enum: ['completa', 'tangencia', 'fuga'],
-      description: 'Abordagem do tema proposto.',
+      description: 'Abordagem do tema proposto ("completa" se discute o tema/envelhecimento; "tangencia" apenas se NÃO menciona o núcleo do tema, tratando só do assunto amplo).',
     },
     tipo_textual: {
       type: Type.STRING,
       enum: ['dissertativo_argumentativo', 'outro_predominante', 'tracos_constantes_outros'],
+      description:
+        'Use "tracos_constantes_outros" quando o texto apresentar traços constantes de relato/desabafo pessoal em 1ª pessoa (ex.: narrar como se fosse um idoso desabafando sobre os próprios filhos por um parágrafo inteiro) e/ou injunção/apelo moral constante ("precisamos ter amor e paciência") sem estrutura dissertativa tripartite (ex.: apenas 2 parágrafos). Use "dissertativo_argumentativo" quando houver estrutura dissertativa em 3 partes.',
     },
     aglomerado_caotico_palavras: { type: Type.BOOLEAN },
     qtd_partes_texto: { type: Type.INTEGER, description: 'Quantidade de partes do texto (mínimo 3: introdução, desenvolvimento, conclusão).' },
@@ -228,29 +230,35 @@ SUA ÚNICA TAREFA É EXTRAIR EVIDÊNCIAS FACTUAIS E CITAR TRECHOS EXATOS. VOCÊ 
 
 REGRAS DE EXTRAÇÃO:
 1. DESVIOS E FALHAS SINTÁTICAS (C1):
-   - Cite apenas palavras ou trechos que REALMENTE contenham erro gramatical, de concordância, regência, pontuação, crase, ortografia ou convenções da escrita.
+   - Inspecione linha por linha TODAS as categorias da C1:
+     a) Acentuação gráfica (ex.: "errôneamente" -> "erroneamente", "maximo" -> "máximo", "Familia" -> "família", "Tedio" -> "tédio", "Historia" -> "história");
+     b) Ortografia e parônimos (ex.: "experenciada" -> "experienciada", "alcansar" -> "alcançar", "Presensiar" -> "presenciar", "Mais Sim" -> "mas sim", "Por que" inicial causal -> "Porque");
+     c) Convenções da escrita: uso indevido de letras maiúsculas no meio da frase em palavras comuns ("Eu", "De", "Ela", "Pai", "Dele", "Velhice", "Historia", "Temos Que Aproveitar");
+     d) Concordância verbal e nominal (ex.: "a fase final... e morte são retratados" -> "são retratadas"; "tem-se... perspectivas contrastantes" -> "têm-se"; "muitas pessoas maltrata" -> "maltratam"; "eles também cuidou" -> "cuidaram"; "nos maltrata e judeia" -> "maltratam e judiam"; "como se fosse nós mesmos" -> "fôssemos");
+     e) Regência e colocação pronominal (ex.: "maltratar da gente" -> "maltratar a gente"; "corrigíamos eles" -> "os corrigíamos"; próclise obrigatória após conjunção subordinativa ou pronome relativo: "uma vez que tem-se" -> "uma vez que se tem", "o qual ambienta-se" -> "o qual se ambienta");
+     f) Pontuação (ex.: vírgula antes de travessão ", -", vírgula unindo orações independentes sem conjunção adequada).
    - O campo "trecho_original" DEVE ser uma cópia literal idêntica à grafia do candidato.
    - Para cada desvio, preencha "forma_correta" com o mesmo trecho corrigido. Se a forma correta for igual ao original, não é desvio: não registre.
    - Concordância: antes de apontar, identifique o núcleo do sujeito. Verbos coordenados com o mesmo sujeito singular ("X perpetua ... e desumaniza ...") estão CORRETOS.
-   - Não invente erros e não aponte estilo pessoal como desvio.
    - Na transcrição de manuscritos, NUNCA corrija a grafia do candidato: um erro corrigido na transcrição é um desvio perdido.
 
 2. TEMA E TIPO TEXTUAL (C2):
-   - Classifique se o texto aborda o tema integralmente ("completa"), se apenas tangencia o tema ("tangencia") ou se foge completamente ("fuga").
-   - Identifique os repertórios socioculturais utilizados, indicando se são legitimados por áreas do saber e se houve vínculo argumentativo direto ("uso_produtivo").
-   - Aponte se a conclusão termina com ideia interrompida/incompleta.
+   - Classifique se o texto aborda o tema integralmente ("completa"), se apenas tangencia o tema ("tangencia") ou se foge completamente ("fuga"). Se o texto discute o envelhecimento/idosos, marque "completa" (não confunda texto fraco com tangência).
+   - Em "tipo_textual", marque "tracos_constantes_outros" quando o texto substituir a dissertação por desabafo/relato pessoal constante em 1ª pessoa (ex.: falar como se fosse um idoso contando que os filhos o maltratam) e apelos morais sem as 3 partes dissertativas.
+   - Identifique os repertórios socioculturais utilizados, indicando se são legitimados por áreas do saber e se houve vínculo argumentativo direto ("uso_produtivo"). Citações soltas na última frase de um texto sem desenvolvimento argumentativo têm "uso_produtivo": false.
 
 3. PROJETO DE TEXTO E ARGUMENTAÇÃO (C3):
-   - Avalie o planejamento argumentativo e se há lacunas no desenvolvimento dos argumentos.
+   - Marque "qualidade_projeto_texto": "muitas_falhas" e "desenvolvimento_argumentativo": "apenas_uma_informacao" (ou "sem_desenvolvimento") quando o texto se basear apenas em casos familiares pessoais, conselhos soltos ou repetição circular da mesma opinião sem fundamentação.
    - Aponte se há contradição grave entre afirmações no texto.
 
 4. COESÃO (C4):
-   - Conte quantos conectivos interparágrafos interligam o início dos parágrafos (mínimo de 2 exigido para nível 5).
-   - Aponte se há inadequação no sentido semântico de algum conectivo ou monobloco.
+   - Conte em "conectivos_interparagrafos_contagem" APENAS conectivos/operadores argumentativos que abrem parágrafos (ex.: "Efetivamente", "Além disso", "Em síntese", "Nesse contexto", "Portanto"). Inícios verbais/temporais comuns ("Em casa...", "Vendo que...", "Entendo que...", "Depois que...") NÃO contam como conectivo interparágrafo.
+   - Liste em "repeticoes_excessivas_palavras" vocábulos ou expressões repetidos à exaustão (ex.: "a gente", "maltratar", "eles", "então", "muitas vezes").
 
 5. PROPOSTA DE INTERVENÇÃO (C5):
    - Identifique com exatidão as citações dos 5 elementos da proposta mais completa: Agente, Ação, Meio/Modo, Efeito e Detalhamento.
-   - Indique se o agente é nulo (ex: "alguém", "a sociedade em geral", "a gente").
+   - Agentes indeterminados, pronomes de 1ª pessoa do plural ("nós", "todos nós", "a gente") ou sujeito oculto em verbos ("temos que", "precisamos") são AGENTES NULOS ("valido": false).
+   - Duas ações coordenadas ("Temos que aproveitar... e não deixar...") contam como uma única AÇÃO; só marque EFEITO quando houver finalidade/consequência explícita ("para", "a fim de", "com o fito de", "de modo a", "promovendo assim").
    - Marque "eh_estrutura_condicional" como true caso a proposta seja condicional ("Se o governo fizer X...", "Caso ocorra Y...").
    - Marque "desrespeita_direitos_humanos" como true caso fira a dignidade humana ou incite violência.
 

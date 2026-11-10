@@ -66,16 +66,31 @@ const AGENTES_NULOS = [
   'muitos',
   'poucos',
   'todos',
+  'todos nos',
+  'nos todos',
   'a gente',
+  'a gente tem que',
   'nos',
+  'eu',
+  'voce',
+  'voces',
   'cada um',
+  'cada pessoa',
   'qualquer um',
+  'qualquer pessoa',
   'quem sabe',
   'a sociedade como um todo',
   'o ser humano',
+  'os seres humanos',
   'as pessoas',
   'todo mundo',
-  'voce',
+  'temos',
+  'temos que',
+  'precisamos',
+  'precisamos de',
+  'devemos',
+  'podemos',
+  'vamos',
 ];
 
 export interface ValidationSummary {
@@ -176,7 +191,7 @@ export function validarEvidenciasAntiAlucinacao(
   }
 
   // Na Grade C2 do ENEM, "3 partes do texto" significa Introdução, Desenvolvimento e Conclusão (máx 3 partes macroestruturais).
-  let qtdPartesMacro = rawEvidence.qtd_partes_texto || 3;
+  let qtdPartesMacro = rawEvidence.qtd_partes_texto ?? 3;
   if (ehMonoblocoSaneado) {
     qtdPartesMacro = Math.min(qtdPartesMacro, 1);
   } else if (modalidade === 'text' && paragrafosReais.length === 2) {
@@ -195,14 +210,19 @@ export function validarEvidenciasAntiAlucinacao(
 
   if (proposta.agente && proposta.agente.trecho) {
     const agenteSimples = simplificar(proposta.agente.trecho);
-    const ehNulo = AGENTES_NULOS.some(
-      (nulo) =>
-        agenteSimples === nulo ||
-        agenteSimples === `o ${nulo}` ||
-        agenteSimples === `a ${nulo}` ||
-        agenteSimples === `os ${nulo}` ||
-        agenteSimples === `as ${nulo}`
+    const contemIndicadorOculto = /\b(oculto|implicito|desinencial|indeterminado|inexistente|eliptico)\b/.test(
+      agenteSimples
     );
+    const ehNulo =
+      contemIndicadorOculto ||
+      AGENTES_NULOS.some(
+        (nulo) =>
+          agenteSimples === nulo ||
+          agenteSimples === `o ${nulo}` ||
+          agenteSimples === `a ${nulo}` ||
+          agenteSimples === `os ${nulo}` ||
+          agenteSimples === `as ${nulo}`
+      );
     if (ehNulo) {
       proposta.agente = {
         ...proposta.agente,

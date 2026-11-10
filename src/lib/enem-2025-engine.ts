@@ -121,8 +121,10 @@ export function calcularNotaEnem2025(
   const qtdDesvios = (evidencias.desvios_identificados || []).length;
   const qtdFalhasSintaticas = (evidencias.falhas_sintaticas || []).length;
   const estrutura = evidencias.qualidade_estrutura_sintatica || 'regular';
-  const ehDeficitaria = estrutura === 'deficitaria' || qtdFalhasSintaticas >= 6;
-  const temMuitosDesvios = qtdDesvios >= 8;
+  const ehDeficitaria = estrutura === 'deficitaria' || qtdFalhasSintaticas >= 5;
+  const temMuitosDesvios = qtdDesvios >= 9;
+  // Nível 1 (40 pts) é reservado a colapso sintático severo E volume extremo de desvios
+  const ehColapsoNivel1 = estrutura === 'deficitaria' && qtdFalhasSintaticas >= 6 && qtdDesvios >= 16;
 
   let nivelC1: 0 | 1 | 2 | 3 | 4 | 5 = 3;
   let justificativaC1 = '';
@@ -131,16 +133,16 @@ export function calcularNotaEnem2025(
   if (estrutura === 'inexistente') {
     nivelC1 = 0;
     justificativaC1 = 'Estrutura sintática inexistente (independentemente da quantidade de desvios).';
-  } else if (ehDeficitaria && temMuitosDesvios) {
+  } else if (ehColapsoNivel1) {
     nivelC1 = 1;
     justificativaC1 = `Estrutura sintática deficitária (${qtdFalhasSintaticas} falha(s)) COM muitos desvios (${qtdDesvios} desvio(s)).`;
   } else if (ehDeficitaria || temMuitosDesvios) {
     nivelC1 = 2;
     justificativaC1 = `Estrutura sintática deficitária (${qtdFalhasSintaticas} falha(s)) OU muitos desvios (${qtdDesvios} desvio(s)).`;
-  } else if (qtdFalhasSintaticas <= 1 && qtdDesvios <= 2) {
+  } else if (qtdFalhasSintaticas <= 1 && qtdDesvios <= 2 && estrutura !== 'regular') {
     nivelC1 = 5;
     justificativaC1 = `Estrutura sintática excelente (${qtdFalhasSintaticas} falha(s) sintática(s), máx. 1) E, no máximo, dois desvios (${qtdDesvios} desvio(s) registrado(s)).`;
-  } else if (qtdFalhasSintaticas <= 3 && qtdDesvios <= 4) {
+  } else if (qtdFalhasSintaticas <= 2 && qtdDesvios <= 5) {
     nivelC1 = 4;
     justificativaC1 = `Estrutura sintática boa (${qtdFalhasSintaticas} falha(s) sintática(s)) E poucos desvios (${qtdDesvios} desvio(s) registrado(s)).`;
   } else {
@@ -281,6 +283,14 @@ export function calcularNotaEnem2025(
     }
   }
 
+  // Coerência C2-C3: se o texto tem projeto com muitas falhas / sem desenvolvimento (C3 <= 2),
+  // citações soltas sem desenvolvimento argumentativo não elevam C2 acima do Nível 3 (120).
+  if (nivelC3 <= 2 && nivelC2 > 3) {
+    nivelC2 = 3;
+    justificativaC2 =
+      'Abordagem completa do tema E 3 partes do texto (com parte embrionária ou repertório sem articulação ao desenvolvimento).';
+  }
+
   // --- COMPETÊNCIA IV ---
   let nivelC4: 0 | 1 | 2 | 3 | 4 | 5 = 3;
   let justificativaC4 = '';
@@ -294,9 +304,12 @@ export function calcularNotaEnem2025(
   if (coesivos === 'ausente') {
     nivelC4 = 0;
     justificativaC4 = 'Ausência de articulação: palavras e/ou períodos desconexos ao longo de todo o texto.';
-  } else if (coesivos === 'rara' || qtdRepeticoes >= 6 || qtdInadequacoes >= 5) {
+  } else if (coesivos === 'rara' || qtdRepeticoes >= 10 || qtdInadequacoes >= 7) {
     nivelC4 = 1;
     justificativaC4 = 'Presença rara de elementos coesivos E/OU excessivas repetições E/OU excessivas inadequações.';
+  } else if (coesivos === 'pontual' || qtdRepeticoes >= 5 || qtdInadequacoes >= 4) {
+    nivelC4 = 2;
+    justificativaC4 = 'Presença pontual de elementos coesivos intra e/ou interparágrafos E/OU muitas repetições E/OU muitas inadequações.';
   } else if (
     coesivos === 'expressiva' &&
     interparagrafos >= 2 &&
@@ -307,21 +320,15 @@ export function calcularNotaEnem2025(
     justificativaC4 = 'Presença expressiva de elementos coesivos intra e interparágrafos E raras ou ausentes repetições E sem inadequação.';
   } else if (
     (coesivos === 'constante' || coesivos === 'expressiva') &&
+    interparagrafos >= 1 &&
     qtdInadequacoes <= 2 &&
-    qtdRepeticoes <= 3
+    qtdRepeticoes <= 2
   ) {
     nivelC4 = 4;
     justificativaC4 = 'Presença constante de elementos coesivos intra e/ou interparágrafos E/OU poucas repetições E/OU poucas inadequações.';
-  } else if (
-    (coesivos === 'regular' || coesivos === 'constante' || coesivos === 'expressiva') &&
-    qtdInadequacoes <= 4 &&
-    qtdRepeticoes <= 5
-  ) {
+  } else {
     nivelC4 = 3;
     justificativaC4 = 'Presença regular de elementos coesivos E/OU algumas repetições E/OU algumas inadequações.';
-  } else {
-    nivelC4 = 2;
-    justificativaC4 = 'Presença pontual de elementos coesivos intra e/ou interparágrafos E/OU muitas repetições E/OU muitas inadequações.';
   }
 
   // Trava C4: Monobloco
