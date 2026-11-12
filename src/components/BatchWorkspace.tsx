@@ -38,6 +38,7 @@ export default function BatchWorkspace() {
   const [textosMotivadores, setTextosMotivadores] = useState('');
   const [modelName, setModelName] = useState('gemini-3.8-flash');
   const [concorrencia, setConcorrencia] = useState(3);
+  const [usarDuplaCorrecao, setUsarDuplaCorrecao] = useState(true);
 
   const [items, setItems] = useState<BatchItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -296,6 +297,7 @@ export default function BatchWorkspace() {
           textosMotivadores,
           apiKey,
           modelName,
+          usarDuplaCorrecao,
         }),
       });
 
@@ -426,6 +428,10 @@ export default function BatchWorkspace() {
         C3: r?.c3?.pontos ?? '',
         C4: r?.c4?.pontos ?? '',
         C5: r?.c5?.pontos ?? '',
+        Confianca_Media: r?.dupla_correcao_decision
+          ? `${Math.round(r.dupla_correcao_decision.confianca_media * 100)}%`
+          : '',
+        Revisao_Humana: r?.dupla_correcao_decision?.revisao_humana_recomendada ? 'SIM' : 'NÃO',
         Tokens: it.tokensUsage?.totalTokens ?? 0,
       };
     });
@@ -707,8 +713,19 @@ export default function BatchWorkspace() {
                             </span>
                           )}
                           {item.status === 'concluido' && (
-                            <span className="inline-flex items-center gap-1 text-teal-700 font-medium">
+                            <span className="inline-flex items-center gap-1.5 text-teal-700 font-medium">
                               <CheckCircle2 className="w-3.5 h-3.5" /> Concluída
+                              {r?.dupla_correcao_decision?.revisao_humana_recomendada && (
+                                <span
+                                  title={
+                                    r.dupla_correcao_decision.motivos_revisao?.join(' ') ||
+                                    'Discrepância entre corretores — recomendada revisão'
+                                  }
+                                  className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded-md"
+                                >
+                                  Revisar
+                                </span>
+                              )}
                             </span>
                           )}
                           {item.status === 'erro' && (
@@ -828,6 +845,7 @@ export default function BatchWorkspace() {
                   >
                     <option value="gemini-3.8-flash">gemini-3.8-flash</option>
                     <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+                    <option value="gemini-decision-1">gemini-decision-1 (0 Output Tokens)</option>
                     <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
                     <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
                     <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
@@ -849,6 +867,25 @@ export default function BatchWorkspace() {
                   </select>
                 </div>
               </div>
+
+              {modelName !== 'gemini-decision-1' && (
+                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-stone-50 border border-stone-200/80 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={usarDuplaCorrecao}
+                    onChange={(e) => setUsarDuplaCorrecao(e.target.checked)}
+                    className="mt-0.5 accent-[#2A6F73] cursor-pointer"
+                  />
+                  <div>
+                    <div className="font-semibold text-stone-800">
+                      Dupla Correção Calibrada (gemini-decision-1)
+                    </div>
+                    <p className="text-[11px] text-stone-500 leading-snug">
+                      Roda um 2º corretor probabilístico com 0 tokens de saída para calibrar notas de fronteira e sinalizar discrepâncias no padrão INEP.
+                    </p>
+                  </div>
+                </label>
+              )}
 
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">

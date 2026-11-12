@@ -144,10 +144,18 @@ export default function StudentScoreModal({
           {/* Banner Superior do Aluno + Nota Global */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-50 border border-slate-200/90 rounded-2xl p-5 gap-4">
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-extrabold tracking-widest text-indigo-700 uppercase bg-indigo-100/80 px-2.5 py-0.5 rounded-md">
                   Boletim Individual Auditado
                 </span>
+                {c.dupla_correcao_decision?.ativo && (
+                  <span className="text-[11px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2.5 py-0.5 rounded-md">
+                    {c.dupla_correcao_decision.modo === 'decision_puro'
+                      ? 'Gemini Decision 1 (0 Output Tokens)'
+                      : 'Dupla Correção INEP (Decision 1)'}{' '}
+                    • Confiança {Math.round(c.dupla_correcao_decision.confianca_media * 100)}%
+                  </span>
+                )}
                 {c.copia_percentual !== undefined && c.copia_percentual > 0 && (
                   <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
                     {c.copia_percentual}% similaridade com motivadores
@@ -197,6 +205,43 @@ export default function StudentScoreModal({
             </div>
           )}
 
+          {/* Painel de Calibração / Discrepância do Gemini Decision 1 */}
+          {c.dupla_correcao_decision?.ativo &&
+            (c.dupla_correcao_decision.ajustes_fronteira_aplicados.length > 0 ||
+              c.dupla_correcao_decision.revisao_humana_recomendada) && (
+              <div
+                className={`p-4 rounded-xl border text-xs space-y-1.5 ${
+                  c.dupla_correcao_decision.revisao_humana_recomendada
+                    ? 'bg-amber-50/80 border-amber-200 text-amber-950'
+                    : 'bg-teal-50/60 border-teal-200 text-teal-950'
+                }`}
+              >
+                <div className="font-extrabold flex items-center justify-between">
+                  <span>
+                    {c.dupla_correcao_decision.revisao_humana_recomendada
+                      ? 'Alerta de Discrepância / Revisão Recomendada (Padrão INEP)'
+                      : 'Calibração de Fronteira via Gemini Decision 1 (0 Output Tokens)'}
+                  </span>
+                  {c.dupla_correcao_decision.nota_corretor_1 !== undefined && (
+                    <span className="font-mono text-[11px]">
+                      Corretor 1: {c.dupla_correcao_decision.nota_corretor_1} pts • Corretor 2 (Decision):{' '}
+                      {c.dupla_correcao_decision.nota_corretor_2} pts
+                    </span>
+                  )}
+                </div>
+                {c.dupla_correcao_decision.ajustes_fronteira_aplicados.map((aj, i) => (
+                  <p key={`aj-${i}`} className="text-slate-700">
+                    • {aj}
+                  </p>
+                ))}
+                {c.dupla_correcao_decision.motivos_revisao.map((m, i) => (
+                  <p key={`rev-${i}`} className="font-semibold text-amber-900">
+                    • {m}
+                  </p>
+                ))}
+              </div>
+            )}
+
           {/* Grade das 5 Competências com as Cores Oficiais do ENEM 2025 */}
           <div className="space-y-3">
             <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
@@ -225,6 +270,14 @@ export default function StudentScoreModal({
                       </div>
 
                       <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                        {typeof comp.item.confianca === 'number' && (
+                          <span
+                            title="Probabilidade calibrada pelo Gemini Decision 1"
+                            className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-teal-50 text-teal-800 border border-teal-200"
+                          >
+                            {Math.round(comp.item.confianca * 100)}% conf.
+                          </span>
+                        )}
                         <span className="px-2.5 py-1 text-xs font-extrabold rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
                           Nível {comp.item.nivel}
                         </span>
