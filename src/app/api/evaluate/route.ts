@@ -5,11 +5,6 @@ import { validarEvidenciasAntiAlucinacao } from '@/lib/anti-hallucination-valida
 import { analisarCopiaMotivadores } from '@/lib/deterministic-copy-detector';
 import { calcularNotaEnem2025 } from '@/lib/enem-2025-engine';
 import { ExtractedEvidence, InputModality } from '@/lib/enem-rubric-types';
-import {
-  construirResultadoDecisionPuro,
-  executarAvaliacaoDecision,
-  reconciliarDuplaCorrecao,
-} from '@/lib/gemini-decision-evaluator';
 
 
 
@@ -26,7 +21,7 @@ export async function POST(req: NextRequest) {
       textosMotivadores = '',
       apiKey: customApiKey,
       modelName = 'gemini-3.8-flash',
-      usarDuplaCorrecao = true,
+      cacheName,
     } = body;
 
     const apiKey = customApiKey || process.env.GEMINI_API_KEY;
@@ -134,59 +129,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 2. Modo Puro Gemini Decision 1 (0 Output Tokens, ultra-rápido)
-    if (modelName === 'gemini-decision-1') {
-      try {
-        const decisionResp = await executarAvaliacaoDecision({
-          apiKey,
-          modalidade,
-          texto,
-          imagemBase64,
-          mimeType,
-          tema: tema || 'Tema padrão do exame',
-        });
-        const resultadoDecision = construirResultadoDecisionPuro(
-          redacaoId,
-          decisionResp,
-          modalidade,
-          copiaAnalise?.percentualCopia
-        );
-        const inTokens = decisionResp.usage?.total_input_tokens || decisionResp.usage?.total_tokens || 0;
-        return NextResponse.json({
-          resultado: resultadoDecision,
-          modeloUtilizado: 'gemini-decision-1',
-          tokensUsage: {
-            promptTokens: inTokens,
-            completionTokens: 0,
-            cachedTokens: 0,
-            totalTokens: inTokens,
-          },
-          copiaDetalhes: copiaAnalise,
-          auditoriaAntiAlucinacao: {
-            desviosDescartados: 0,
-            avisos: ['Avaliação direta via Gemini Decision 1 (0 tokens de saída).'],
-          },
-        });
-      } catch (decErr: any) {
-        // Se a chave/região ainda não tiver acesso ao gemini-decision-1, faz fallback transparente para gemini-3.8-flash
-        console.warn('Fallback de gemini-decision-1 para gemini-3.8-flash:', decErr?.message);
-      }
-    }
-
-    // Dispara em paralelo o 2º Corretor Calibrado (gemini-decision-1) quando usarDuplaCorrecao estiver ativo
-    const decisionPromise =
-      usarDuplaCorrecao && modelName !== 'gemini-decision-1'
-        ? executarAvaliacaoDecision({
-            apiKey,
-            modalidade,
-            texto,
-            imagemBase64,
-            mimeType,
-            tema: tema || 'Tema padrão do exame',
-          }).catch(() => null)
-        : Promise.resolve(null);
-
-    // 3. Chamada à Gemini API com temperature=0 e responseSchema estrito
+    // 2. Chamada à Gemini API com temperature=0 e responseSchema estrito
     const ai = new GoogleGenAI({ apiKey });
 
     const contents: any[] = [];
@@ -290,30 +233,19 @@ export async function POST(req: NextRequest) {
     } = validarEvidenciasAntiAlucinacao(textoFinal, rawEvidence, modalidade);
 
     // 4. Motor Determinístico da Grade 2025
-    let resultado = calcularNotaEnem2025(
+    const resultado = calcularNotaEnem2025(
       redacaoId,
       evidenciasSaneadas,
       modalidade,
       copiaAnalise?.percentualCopia
     );
 
-    // 5. Reconciliação com o 2º Corretor Calibrado (`gemini-decision-1`), se disponível
-    const decisionResp = await decisionPromise;
-    let decisionInputTokens = 0;
-    if (decisionResp && decisionResp.answers) {
-      resultado = reconciliarDuplaCorrecao(resultado, decisionResp);
-      decisionInputTokens =
-        decisionResp.usage?.total_input_tokens || decisionResp.usage?.total_tokens || 0;
-    }
-
     const usage = response.usageMetadata;
-    const promptTokens = (usage?.promptTokenCount || 0) + decisionInputTokens;
-    const completionTokens = usage?.candidatesTokenCount || 0;
     const tokensUsage = {
-      promptTokens,
-      completionTokens,
+      promptTokens: usage?.promptTokenCount || 0,
+      completionTokens: usage?.candidatesTokenCount || 0,
       cachedTokens: (usage as any)?.cachedContentTokenCount || 0,
-      totalTokens: (usage?.totalTokenCount || 0) + decisionInputTokens,
+      totalTokens: usage?.totalTokenCount || 0,
     };
 
     return NextResponse.json({

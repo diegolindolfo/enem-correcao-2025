@@ -111,27 +111,6 @@ export interface CompetenciaScore {
   pontos: number; // 0, 40, 80, 120, 160, 200
   travas_acionadas: string[];
   justificativa_oficial: string;
-  confianca?: number; // 0 a 1 (retornado pelo gemini-decision-1)
-  probabilidades_nivel?: Record<string, number>;
-}
-
-export interface DecisionCalibrationSummary {
-  ativo: boolean;
-  modo: 'dupla_correcao_hibrida' | 'decision_puro';
-  confianca_media: number;
-  nota_corretor_1?: number;
-  nota_corretor_2: number;
-  notas_por_competencia_decision: {
-    c1: number;
-    c2: number;
-    c3: number;
-    c4: number;
-    c5: number;
-  };
-  houve_discrepancia_inep: boolean;
-  revisao_humana_recomendada: boolean;
-  ajustes_fronteira_aplicados: string[];
-  motivos_revisao: string[];
 }
 
 export interface GradingResult {
@@ -148,5 +127,4 @@ export interface GradingResult {
   evidencias_auditadas: ExtractedEvidence;
   desvios_c1_validados: DesvioItem[];
   copia_percentual?: number;
-  dupla_correcao_decision?: DecisionCalibrationSummary;
 }
