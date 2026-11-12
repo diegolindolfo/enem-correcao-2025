@@ -127,10 +127,14 @@ export function validarEvidenciasAntiAlucinacao(
   const desviosDescartadosPorAlucinacao: DesvioItem[] = [];
   const falhasSintaticasValidadas: FalhaSintaticaItem[] = [];
 
-  // 1. Validação C1: Desvios (exige substring exata para não inventar erro ortográfico/gramatical)
+  // 1. Validação C1: Desvios (exige substring exata para não inventar erro ortográfico/gramatical e sem duplicar o mesmo trecho)
+  const desviosVistos = new Set<string>();
   if (Array.isArray(rawEvidence.desvios_identificados)) {
     for (const d of rawEvidence.desvios_identificados) {
       if (!d?.trecho_original || d.trecho_original.trim().length === 0) continue;
+
+      const chaveTrecho = normalizarParaComparacao(d.trecho_original);
+      if (desviosVistos.has(chaveTrecho)) continue;
 
       // Filtro de citação mínima: impede que um trecho isolado de 1 letra ("a", "e") case falsamente em qualquer palavra
       if (simplificar(d.trecho_original).length < 2) {
@@ -151,6 +155,7 @@ export function validarEvidenciasAntiAlucinacao(
       }
 
       if (trechoExisteNoTexto(textoSimples, unirTranslineacao(d.trecho_original), false)) {
+        desviosVistos.add(chaveTrecho);
         desviosValidados.push(d);
       } else {
         desviosDescartadosPorAlucinacao.push(d);
@@ -252,9 +257,33 @@ export function validarEvidenciasAntiAlucinacao(
     }
   }
 
+  // 5. Proteção contra falso positivo de PROVA_ASSINADA no cabeçalho oficial do formulário ENEM:
+  // Se a IA apontar PROVA_ASSINADA ou IDENTIFICACAO_CORPO_TEXTO lendo o cabeçalho externo da folha,
+  // o nome não estará dentro da transcrição das 30 linhas do corpo do texto.
+  let anulacaoSaneada = rawEvidence.anulacao_detectada
+    ? { ...rawEvidence.anulacao_detectada }
+    : undefined;
+  if (
+    anulacaoSaneada?.houve_anulacao &&
+    (anulacaoSaneada.motivo_hierarquico === 'PROVA_ASSINADA' ||
+      anulacaoSaneada.motivo_hierarquico === 'IDENTIFICACAO_CORPO_TEXTO') &&
+    textoSimples.length > 0
+  ) {
+    const trechoAssinatura = anulacaoSaneada.evidencia_trecho || '';
+    if (!trechoAssinatura || !trechoExisteNoTexto(textoSimples, trechoAssinatura, false)) {
+      anulacaoSaneada = {
+        houve_anulacao: false,
+      };
+      avisosAuditoria.push(
+        'Anulação por assinatura descartada: a assinatura consta apenas no cabeçalho oficial externo da folha, não no corpo do texto.'
+      );
+    }
+  }
+
   // Clonagem saneada das evidências com arrays garantidos
   const evidenciasSaneadas: ExtractedEvidence = {
     ...rawEvidence,
+    anulacao_detectada: anulacaoSaneada,
     desvios_identificados: desviosValidados,
     falhas_sintaticas: falhasSintaticasValidadas,
     partes_embrionarias_indices: Array.isArray(rawEvidence.partes_embrionarias_indices)

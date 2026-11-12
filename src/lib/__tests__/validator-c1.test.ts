@@ -173,4 +173,55 @@ describe('Validador e Calibração com Gabaritos Oficiais (Redações 13, 11 e 1
     expect([res.c1.pontos, res.c2.pontos, res.c3.pontos, res.c4.pontos, res.c5.pontos]).toEqual([80, 40, 80, 80, 40]);
     expect(res.nota_total).toBe(320);
   });
+
+  it('Redação Nota 1000 Oficial ENEM 2025 (Bruna Gabriella) -> Protege contra anulação por assinatura no cabeçalho externo e deduplica desvios repetidos', () => {
+    const TEXTO_BRUNA_1000 =
+      'No filme "O Senhor Estagiário", é retratada a dificuldade de inserção de um homem idoso no ambiente laboral, onde ele sofre preconceitos relacionados à sua idade e à sua capacitação profissional. Fora da ficção, a problemática abordada na trama faz-se cada vez mais presente no cenário brasileiro, haja vista o progressivo envelhecimento populacional no país. Diante disso, é crucial analisar a escassez de políticas assistenciais voltadas aos idosos e o etarismo como mazelas referentes a tal fenômeno social.\n' +
+      'Sob essa ótica, vale frisar a insuficiência de auxílios governamentais à crescente população idosa. Acerca disso, cabe mencionar que o Estatuto do Idoso prevê a garantia da qualidade de vida dos idosos brasileiros, por meio, por exemplo, do acesso pleno à aposentadoria. Entretanto, tal premissa não se consolida integralmente no Brasil, uma vez que considerável parcela dos indivíduos mais velhos — em especial os mais pobres — não usufrui de benefícios e de serviços essenciais à manutenção de seu bem-estar, como atendimentos de saúde regulares. Isso ocorre em razão do ínfimo investimento estatal em políticas assistenciais voltadas ao público idoso, a título de auxílio financeiro e da oferta de tratamento médico gratuito em hospitais públicos. Em consequência disso, muitos idosos, incapazes de custear as próprias necessidades — frequentemente devido à falta de renda na velhice — e carentes de um suporte governamental, ficam ainda mais vulneráveis ao desenvolvimento de enfermidades que requerem tratamentos e acompanhamento adequados, como o Mal de Alzheimer.\n' +
+      'Outrossim, os preconceitos associados à população mais velha são outro empecilho relacionado ao envelhecimento populacional. Nessa lógica, em sua obra "A Velhice", Simone de Beauvoir afirma que a sociedade visualiza os idosos como indivíduos inválidos, incapazes de contribuir com o corpo social. A perspectiva estigmatizada denunciada pela socióloga configura o etarismo, preconceito que dificulta a integração de idosos em determinados espaços sociais, como as universidades. Posto isto, tal visão deturpada se perpetua devido à falta de projetos midiáticos que visem desconstruir os supracitados estigmas, a exemplo de programas televisivos que abordem a participação de pessoas mais velhas no mercado de trabalho (com exemplos reais). Dessa forma, a persistência da rejeição social à inserção dos idosos na dinâmica social contribui para a marginalização e para a dificuldade de sustento e de realização pessoal desse grupo.\n' +
+      'Portanto, cabe às secretarias estaduais e municipais promover a disponibilidade de programas assistenciais à parcela idosa, mediante a destinação de verbas, a fim de garantir o acesso aos serviços fundamentais a esse grupo (a exemplo de atendimento médico), promovendo, assim, a qualidade de vida dessas pessoas. Ademais, a Mídia deve exibir programas televisivos com o fito de desconstruir o etarismo no Brasil, evitando realidades como a retratada em "O Senhor Estagiário".';
+
+    const evBruna: ExtractedEvidence = {
+      ...base([
+        { trecho_original: 'onde ele sofre', forma_correta: 'em que ele sofre', tipo: 'gramatical', explicacao_curta: 'Uso de onde para referente não locativo físico estrito' },
+        { trecho_original: 'onde ele sofre', forma_correta: 'em que ele sofre', tipo: 'gramatical', explicacao_curta: 'Duplicata gerada pela IA que deve ser deduplicada' },
+      ]),
+      qualidade_estrutura_sintatica: 'excelente',
+      total_linhas_manuscritas: 30,
+      repertorios: [
+        { trecho_citado: 'No filme "O Senhor Estagiário"', fonte_ou_area: 'Cinema', legitimado: true, pertinente: true, uso_produtivo: true, baseado_textos_motivadores: false },
+        { trecho_citado: 'Estatuto do Idoso', fonte_ou_area: 'Legislação', legitimado: true, pertinente: true, uso_produtivo: true, baseado_textos_motivadores: false },
+        { trecho_citado: 'em sua obra "A Velhice", Simone de Beauvoir', fonte_ou_area: 'Filosofia / Sociologia', legitimado: true, pertinente: true, uso_produtivo: true, baseado_textos_motivadores: false },
+      ],
+      proposta_intervencao: {
+        agente: { trecho: 'secretarias estaduais e municipais', valido: true },
+        acao: { trecho: 'promover a disponibilidade de programas assistenciais à parcela idosa', valido: true },
+        meio_modo: { trecho: 'mediante a destinação de verbas', valido: true },
+        efeito: { trecho: 'a fim de garantir o acesso aos serviços fundamentais a esse grupo', valido: true },
+        detalhamento: { trecho: '(a exemplo de atendimento médico)', valido: true },
+        eh_estrutura_condicional: false,
+        desrespeita_direitos_humanos: false,
+        nao_relacionada_ao_assunto: false,
+      },
+      // Simula IA confundindo o cabeçalho superior "Assinatura do Participante: Bruna Gabriella Tavares" com PROVA_ASSINADA
+      anulacao_detectada: {
+        houve_anulacao: true,
+        motivo_hierarquico: 'PROVA_ASSINADA',
+        explicacao: 'Assinatura Bruna Gabriella Tavares no cabeçalho superior da Folha de Redação.',
+      },
+    };
+
+    const { evidenciasSaneadas, desviosValidados } = validarEvidenciasAntiAlucinacao(
+      TEXTO_BRUNA_1000,
+      evBruna,
+      'handwritten_media'
+    );
+    expect(evidenciasSaneadas.anulacao_detectada?.houve_anulacao).toBe(false);
+    expect(desviosValidados).toHaveLength(1);
+
+    const res = calcularNotaEnem2025('bruna_1000', evidenciasSaneadas, 'handwritten_media');
+    expect(res.anulada).toBe(false);
+    expect([res.c1.pontos, res.c2.pontos, res.c3.pontos, res.c4.pontos, res.c5.pontos]).toEqual([200, 200, 200, 200, 200]);
+    expect(res.nota_total).toBe(1000);
+  });
 });

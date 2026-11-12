@@ -32,9 +32,8 @@ import {
 
 export default function BatchWorkspace() {
   const [apiKey, setApiKey] = useState('');
-  const [tema, setTema] = useState(
-    'Desafios para a valorização de comunidades e povos tradicionais no Brasil'
-  );
+  const [tema, setTema] = useState('');
+  const [erroTema, setErroTema] = useState(false);
   const [textosMotivadores, setTextosMotivadores] = useState('');
   const [modelName, setModelName] = useState('gemini-3.8-flash');
   const [concorrencia, setConcorrencia] = useState(3);
@@ -56,6 +55,7 @@ export default function BatchWorkspace() {
   const processingRef = useRef(false);
   processingRef.current = isProcessing;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const temaInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     carregarTodosItens().then(async (itensSalvos) => {
@@ -281,6 +281,13 @@ export default function BatchWorkspace() {
   };
 
   const processarUnicoItem = async (item: BatchItem) => {
+    const temaEfetivo = (tema.trim() || item.tema || '').trim();
+    if (!temaEfetivo) {
+      setErroTema(true);
+      temaInputRef.current?.focus();
+      return;
+    }
+
     atualizarStatusItem(item.id, 'processando');
     try {
       const resp = await fetch('/api/evaluate', {
@@ -292,7 +299,7 @@ export default function BatchWorkspace() {
           texto: item.texto,
           imagemBase64: item.imagemBase64,
           mimeType: item.mimeType,
-          tema: item.tema || tema,
+          tema: temaEfetivo,
           textosMotivadores,
           apiKey,
           modelName,
@@ -323,14 +330,21 @@ export default function BatchWorkspace() {
   };
 
   const startProcessing = async () => {
-    setIsProcessing(true);
-    processingRef.current = true;
-
     const queue = items.filter((it) => it.status === 'pendente' || it.status === 'erro');
     if (queue.length === 0) {
-      setIsProcessing(false);
       return;
     }
+
+    const faltaTema = queue.some((it) => !(tema.trim() || it.tema || '').trim());
+    if (faltaTema) {
+      setErroTema(true);
+      temaInputRef.current?.focus();
+      return;
+    }
+
+    setErroTema(false);
+    setIsProcessing(true);
+    processingRef.current = true;
 
     let currentIndex = 0;
 
@@ -510,15 +524,30 @@ export default function BatchWorkspace() {
         <div className="bg-white border border-stone-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-400 mb-1">
-                Tema da Redação
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-400">
+                  Tema da Redação <span className="text-red-500">*</span>
+                </label>
+                {erroTema && (
+                  <span className="text-[11px] font-semibold text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> Preencha o tema antes de corrigir
+                  </span>
+                )}
+              </div>
               <input
+                ref={temaInputRef}
                 type="text"
                 value={tema}
-                onChange={(e) => setTema(e.target.value)}
-                placeholder="Digite a frase temática..."
-                className="w-full text-sm font-medium px-3.5 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-teal-700 transition"
+                onChange={(e) => {
+                  setTema(e.target.value);
+                  if (e.target.value.trim()) setErroTema(false);
+                }}
+                placeholder="Digite a frase temática antes de iniciar a correção..."
+                className={`w-full text-sm font-medium px-3.5 py-2 rounded-xl border transition focus:outline-none ${
+                  erroTema
+                    ? 'border-red-400 bg-red-50/40 focus:border-red-600'
+                    : 'border-stone-200 focus:border-teal-700'
+                }`}
               />
             </div>
 
