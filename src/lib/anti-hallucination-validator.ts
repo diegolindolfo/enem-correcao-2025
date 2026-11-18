@@ -109,6 +109,37 @@ export function unirTranslineacao(texto: string): string {
 }
 
 /**
+ * Separa os parágrafos do texto transcrito ou digitado.
+ * Quando a IA devolve manuscrito sem quebras de linha (mas sem eh_monobloco),
+ * recupera as fronteiras pelos conectivos clássicos de abertura de D1, D2 e Conclusão.
+ */
+export function separarParagrafosTexto(texto: string, ehMonobloco?: boolean): string[] {
+  const limpo = (texto || '').replace(/\r\n/g, '\n').trim();
+  if (!limpo) return [];
+  if (ehMonobloco) return [limpo.replace(/\n+/g, ' ')];
+
+  const porQuebra = limpo
+    .split(/\n+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  if (porQuebra.length >= 2) {
+    return porQuebra;
+  }
+
+  // Fallback para transcrições manuscritas que vieram sem '\n' mas não são monobloco:
+  // divide antes de conectivos clássicos de abertura de D1, D2 e Conclusão do ENEM
+  const partes = limpo
+    .split(
+      /(?<=[.!?])\s+(?=(?:Nesse sentido,\s+destaca-se|Diante desse cen[aá]rio,|Sob ess[ea] (?:[oó]tica|[oó]ptica|prisma|l[oó]gica|vi[eé]s),|Em primeira an[aá]lise,|Em primeiro lugar,|A princ[ií]pio,|De in[ií]cio,|Primeiramente,|Ademais,|Outrossim,|Al[eé]m disso,|Por outro lado,|Em contrapartida,|Portanto,|Em s[ií]ntese,|Dessa forma,\s+tendo em vista|Infere-se,\s+portanto,|Logo,\s+(?:cabe|urge|torna-se)|É\s+(?:urgente|premente|imprescind[ií]vel),\s+portanto,))/g
+    )
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  return partes.length >= 2 ? partes : [limpo];
+}
+
+/**
  * Compara mantendo acentos e pontuação (para não confundir "errôneamente" com "erroneamente").
  */
 function normalizarParaComparacao(texto: string): string {
@@ -303,9 +334,15 @@ export function validarEvidenciasAntiAlucinacao(
       })
     : [];
 
+  const transcricaoNormalizada =
+    typeof rawEvidence.transcricao === 'string' && rawEvidence.transcricao.trim().length > 0
+      ? separarParagrafosTexto(rawEvidence.transcricao, ehMonoblocoSaneado).join('\n\n')
+      : rawEvidence.transcricao;
+
   // Clonagem saneada das evidências com arrays garantidos
   const evidenciasSaneadas: ExtractedEvidence = {
     ...rawEvidence,
+    ...(transcricaoNormalizada !== undefined ? { transcricao: transcricaoNormalizada } : {}),
     anulacao_detectada: anulacaoSaneada,
     desvios_identificados: desviosValidados,
     falhas_sintaticas: falhasSintaticasValidadas,

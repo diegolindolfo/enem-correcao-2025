@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { GradingResult } from '@/lib/enem-rubric-types';
+import { separarParagrafosTexto } from '@/lib/anti-hallucination-validator';
 import {
   X,
   Printer,
@@ -88,6 +89,9 @@ export default function StudentScoreModal({
   ];
 
   const totalDesviosC1 = (c.desvios_c1_validados?.length || 0) + (ev?.falhas_sintaticas?.length || 0);
+  const paragrafosTexto = textoOriginal
+    ? separarParagrafosTexto(textoOriginal, ev?.eh_monobloco)
+    : [];
 
   const isPdf = Boolean(
     imagemUrl &&
@@ -466,18 +470,33 @@ export default function StudentScoreModal({
               {textoOriginal && (
                 <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/70">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-indigo-700" />
-                      {imagemUrl ? 'Transcrição Fiel da Folha Manuscrita' : 'Texto Integral da Redação'}
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-indigo-700" />
+                        {imagemUrl ? 'Transcrição Fiel da Folha Manuscrita' : 'Texto Integral da Redação'}
+                      </h4>
+                      <span className="text-[11px] font-bold px-2 py-0.5 bg-white border border-slate-200 rounded-md text-slate-700">
+                        {paragrafosTexto.length} parágrafo(s)
+                      </span>
+                    </div>
                     {imagemUrl && (
                       <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
                         Transcrição automática — confira a grafia na folha ao lado
                       </span>
                     )}
                   </div>
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-mono whitespace-pre-wrap leading-relaxed text-slate-800 max-h-96 overflow-y-auto print:max-h-none">
-                    {textoOriginal}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-mono leading-relaxed text-slate-800 max-h-96 overflow-y-auto print:max-h-none space-y-3">
+                    {paragrafosTexto.map((paragrafo, idx) => (
+                      <p
+                        key={idx}
+                        className="pb-2.5 last:pb-0 border-b last:border-b-0 border-slate-100 whitespace-pre-wrap"
+                      >
+                        <span className="inline-block text-[10px] font-sans font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 rounded px-1.5 py-0.2 mr-2 select-none">
+                          {idx + 1}º §
+                        </span>
+                        {paragrafo}
+                      </p>
+                    ))}
                   </div>
                 </div>
               )}

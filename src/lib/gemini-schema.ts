@@ -9,7 +9,7 @@ export const ENEM_EVIDENCE_RESPONSE_SCHEMA: Schema = {
   properties: {
     transcricao: {
       type: Type.STRING,
-      description: 'Transcrição literal e integral do texto (quando a entrada for imagem ou PDF manuscrito), PRESERVANDO todos os erros do candidato (grafia, acentuação, pontuação, maiúsculas) sem corrigir nada. Palavras divididas na troca de linha (ex.: "sa-" + "crifícios") devem ser unidas sem hífen ("sacrifícios"). Separe parágrafos com quebra de linha. Deixe vazio se já for texto digitado.',
+      description: 'Transcrição literal e integral do texto (quando a entrada for imagem ou PDF manuscrito), PRESERVANDO todos os erros do candidato (grafia, acentuação, pontuação, maiúsculas) sem corrigir nada. Palavras divididas na troca de linha (ex.: "sa-" + "crifícios") devem ser unidas sem hífen ("sacrifícios"). Separe OBRIGATORIAMENTE cada parágrafo com duas quebras de linha ("\\n\\n") sempre que houver recuo de parágrafo na folha manuscrita. Deixe vazio se já for texto digitado.',
     },
     total_linhas_manuscritas: {
       type: Type.INTEGER,
@@ -232,7 +232,7 @@ REGRAS DE EXTRAÇÃO CALIBRADAS COM REDAÇÕES OFICIAIS DO INEP 2025:
 1. MANUSCRITOS, RASURAS REGULAMENTARES E CABEÇALHO OFICIAL:
    - RASURAS: Conforme a instrução oficial da folha do ENEM, palavras ou sílabas riscadas com traço simples e seguidas/sobrepostas pelo respectivo substitutivo (ex.: riscar "necessárias" e escrever "suficientes" acima; riscar sílaba no fim da linha e escrever a palavra inteira na linha seguinte) são RASURAS REGULAMENTARES. Ignore a palavra riscada na transcrição e JAMAIS a aponte como desvio na C1.
    - CABEÇALHO DO FORMULÁRIO: O nome completo, assinatura, CPF, número de inscrição e códigos de barras situados no cabeçalho/rodapé oficial da folha (fora das linhas numeradas de 1 a 30) fazem parte do documento oficial e JAMAIS configuram "PROVA_ASSINADA" ou "IDENTIFICACAO_CORPO_TEXTO".
-   - Na transcrição de manuscritos, transcreva fielmente o texto válido (pós-rasura) sem corrigir erros reais deixados pelo candidato e una palavras translineadas (divididas por hífen na quebra de linha).
+   - Na transcrição de manuscritos, transcreva fielmente o texto válido (pós-rasura) sem corrigir erros reais deixados pelo candidato e una palavras translineadas (divididas por hífen na quebra de linha). Separe OBRIGATORIAMENTE cada parágrafo com duas quebras de linha ("\\n\\n") sempre que houver recuo de parágrafo na folha manuscrita.
 
 2. DESVIOS E FALHAS SINTÁTICAS (C1):
    - Inspecione linha por linha as categorias da C1:

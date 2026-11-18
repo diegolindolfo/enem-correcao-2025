@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { validarEvidenciasAntiAlucinacao, unirTranslineacao } from '../anti-hallucination-validator';
+import {
+  validarEvidenciasAntiAlucinacao,
+  unirTranslineacao,
+  separarParagrafosTexto,
+} from '../anti-hallucination-validator';
 import { calcularNotaEnem2025 } from '../enem-2025-engine';
 import { ExtractedEvidence } from '../enem-rubric-types';
 
@@ -223,5 +227,29 @@ describe('Validador e Calibração com Gabaritos Oficiais (Redações 13, 11 e 1
     expect(res.anulada).toBe(false);
     expect([res.c1.pontos, res.c2.pontos, res.c3.pontos, res.c4.pontos, res.c5.pontos]).toEqual([200, 200, 200, 200, 200]);
     expect(res.nota_total).toBe(1000);
+  });
+
+  it('separa parágrafos tanto por quebras de linha quanto em transcrição corrida pelos conectivos de abertura', () => {
+    const comQuebras = separarParagrafosTexto('Primeiro parágrafo.\nSegundo parágrafo.\n\nTerceiro parágrafo.');
+    expect(comQuebras).toEqual([
+      'Primeiro parágrafo.',
+      'Segundo parágrafo.',
+      'Terceiro parágrafo.',
+    ]);
+
+    const corrida =
+      'A música Pela Internet 2 inicia a discussão sobre tecnologia. ' +
+      'Nesse sentido, destaca-se que a dificuldade persiste nas escolas. ' +
+      'Ademais, a ausência de formação docente agrava o quadro. ' +
+      'Portanto, faz-se urgente que medidas sejam tomadas pelo MEC.';
+
+    const separados = separarParagrafosTexto(corrida, false);
+    expect(separados).toHaveLength(4);
+    expect(separados[1]).toMatch(/^Nesse sentido, destaca-se/);
+    expect(separados[2]).toMatch(/^Ademais,/);
+    expect(separados[3]).toMatch(/^Portanto,/);
+
+    // Respeita texto monobloco sem dividir em múltiplos parágrafos
+    expect(separarParagrafosTexto(corrida, true)).toHaveLength(1);
   });
 });
