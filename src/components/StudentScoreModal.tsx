@@ -1,20 +1,18 @@
 'use client';
 
-import React from 'react';
-import { GradingResult } from '@/lib/enem-rubric-types';
+import React, { useEffect, useState } from 'react';
+import { CompetenciaScore, GradingResult } from '@/lib/enem-rubric-types';
 import { separarParagrafosTexto } from '@/lib/anti-hallucination-validator';
 import {
   X,
   Printer,
-  AlertTriangle,
-  CheckCircle,
-  ShieldAlert,
-  BookOpen,
-  Link2,
-  FileText,
-  Award,
+  ChevronDown,
   Check,
-  XCircle,
+  Minus,
+  AlertTriangle,
+  ShieldAlert,
+  ArrowRight,
+  Download,
 } from 'lucide-react';
 
 interface Props {
@@ -25,6 +23,27 @@ interface Props {
   onClose: () => void;
 }
 
+type CompId = 'c1' | 'c2' | 'c3' | 'c4' | 'c5';
+
+const COMPETENCIAS: { id: CompId; sigla: string; titulo: string; cor: string }[] = [
+  { id: 'c1', sigla: 'C1', titulo: 'Norma culta', cor: 'bg-fuchsia-600' },
+  { id: 'c2', sigla: 'C2', titulo: 'Tema e repertório', cor: 'bg-rose-600' },
+  { id: 'c3', sigla: 'C3', titulo: 'Argumentação', cor: 'bg-sky-600' },
+  { id: 'c4', sigla: 'C4', titulo: 'Coesão', cor: 'bg-amber-500' },
+  { id: 'c5', sigla: 'C5', titulo: 'Proposta de intervenção', cor: 'bg-emerald-600' },
+];
+
+const TIPO_DESVIO: Record<string, string> = {
+  gramatical: 'Gramática',
+  ortografia: 'Ortografia',
+  pontuacao: 'Pontuação',
+  escolha_vocabular: 'Vocabulário',
+  convencoes_escrita: 'Convenções',
+  truncamento: 'Truncamento',
+  justaposicao: 'Justaposição',
+  outro: 'Estrutura',
+};
+
 export default function StudentScoreModal({
   resultado,
   alunoNome,
@@ -32,116 +51,267 @@ export default function StudentScoreModal({
   imagemUrl,
   onClose,
 }: Props) {
-  const imprimirEspelho = () => {
-    window.print();
-  };
-
   const c = resultado;
   const ev = c.evidencias_auditadas;
 
-  // Paleta oficial inspirada na Grade Específica do ENEM 2025
-  const competenciasConfig = [
-    {
-      id: 'C1',
-      titulo: 'Competência I',
-      subtitulo: 'Domínio da modalidade escrita formal da língua portuguesa',
-      item: c.c1,
-      corBarra: 'bg-fuchsia-700',
-      corBadge: 'bg-fuchsia-50 text-fuchsia-900 border-fuchsia-200',
-      corBorda: 'border-l-fuchsia-700',
-    },
-    {
-      id: 'C2',
-      titulo: 'Competência II',
-      subtitulo: 'Compreensão da proposta, tipo textual e repertório sociocultural',
-      item: c.c2,
-      corBarra: 'bg-rose-700',
-      corBadge: 'bg-rose-50 text-rose-900 border-rose-200',
-      corBorda: 'border-l-rose-700',
-    },
-    {
-      id: 'C3',
-      titulo: 'Competência III',
-      subtitulo: 'Projeto de texto, seleção e organização de informações e argumentos',
-      item: c.c3,
-      corBarra: 'bg-sky-700',
-      corBadge: 'bg-sky-50 text-sky-900 border-sky-200',
-      corBorda: 'border-l-sky-700',
-    },
-    {
-      id: 'C4',
-      titulo: 'Competência IV',
-      subtitulo: 'Conhecimento dos mecanismos linguísticos de coesão e articulação',
-      item: c.c4,
-      corBarra: 'bg-amber-600',
-      corBadge: 'bg-amber-50 text-amber-900 border-amber-200',
-      corBorda: 'border-l-amber-600',
-    },
-    {
-      id: 'C5',
-      titulo: 'Competência V',
-      subtitulo: 'Proposta de intervenção para o problema abordado (5 elementos)',
-      item: c.c5,
-      corBarra: 'bg-emerald-700',
-      corBadge: 'bg-emerald-50 text-emerald-900 border-emerald-200',
-      corBorda: 'border-l-emerald-700',
-    },
-  ];
-
-  const totalDesviosC1 = (c.desvios_c1_validados?.length || 0) + (ev?.falhas_sintaticas?.length || 0);
-  const paragrafosTexto = textoOriginal
-    ? separarParagrafosTexto(textoOriginal, ev?.eh_monobloco)
-    : [];
-
-  const isPdf = Boolean(
-    imagemUrl &&
-      (imagemUrl.startsWith('data:application/pdf') ||
-        imagemUrl.toLowerCase().endsWith('.pdf'))
+  // Abre por padrão apenas as competências que perderam pontos
+  const [abertas, setAbertas] = useState<Set<CompId>>(
+    () => new Set(COMPETENCIAS.filter((comp) => c[comp.id].pontos < 200).map((comp) => comp.id))
   );
+  const [abaTexto, setAbaTexto] = useState<'transcricao' | 'folha'>('transcricao');
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const alternar = (id: CompId) =>
+    setAbertas((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const paragrafos = textoOriginal ? separarParagrafosTexto(textoOriginal, ev?.eh_monobloco) : [];
+  const isPdf = Boolean(
+    imagemUrl && (imagemUrl.startsWith('data:application/pdf') || imagemUrl.toLowerCase().endsWith('.pdf'))
+  );
+  const nota = c.anulada ? 0 : c.nota_total;
+  const corNota = c.anulada
+    ? 'text-red-600'
+    : nota >= 900
+    ? 'text-teal-700'
+    : nota >= 600
+    ? 'text-stone-900'
+    : 'text-amber-700';
+
+  const falhas = ev?.falhas_sintaticas || [];
+  const desvios = c.desvios_c1_validados || [];
+  const proposta = ev?.proposta_intervencao;
+
+  // ---------- Conteúdo de cada competência ----------
+  const renderDetalhe = (id: CompId) => {
+    switch (id) {
+      case 'c1':
+        if (falhas.length === 0 && desvios.length === 0) {
+          return <Vazio texto="Nenhum desvio encontrado." />;
+        }
+        return (
+          <ul className="divide-y divide-stone-100">
+            {falhas.map((f, i) => (
+              <li key={`f-${i}`} className="py-2.5 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-stone-800">“{f.trecho_original}”</span>
+                  <Etiqueta texto={`Sintaxe · ${TIPO_DESVIO[f.tipo] || f.tipo}`} tom="amber" />
+                </div>
+                {f.explicacao_curta && <p className="text-stone-500 mt-1">{f.explicacao_curta}</p>}
+              </li>
+            ))}
+            {desvios.map((d, i) => (
+              <li key={`d-${i}`} className="py-2.5 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                    <span className="text-rose-700 line-through decoration-rose-300">{d.trecho_original}</span>
+                    {d.forma_correta && (
+                      <>
+                        <ArrowRight className="w-3 h-3 text-stone-400 shrink-0" />
+                        <span className="text-teal-800 font-medium">{d.forma_correta}</span>
+                      </>
+                    )}
+                  </span>
+                  <Etiqueta texto={TIPO_DESVIO[d.tipo] || d.tipo} />
+                </div>
+                {d.explicacao_curta && <p className="text-stone-500 mt-1">{d.explicacao_curta}</p>}
+              </li>
+            ))}
+          </ul>
+        );
+
+      case 'c2': {
+        const reps = ev?.repertorios || [];
+        return (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              <Fato
+                ok={ev?.abordagem_tema === 'completa'}
+                texto={
+                  ev?.abordagem_tema === 'completa'
+                    ? 'Tema abordado por completo'
+                    : ev?.abordagem_tema === 'tangencia'
+                    ? 'Tangenciou o tema'
+                    : 'Fuga ao tema'
+                }
+              />
+              <Fato ok={ev?.tipo_textual === 'dissertativo_argumentativo'} texto="Dissertativo-argumentativo" />
+              <Fato ok={(ev?.qtd_partes_texto ?? 0) >= 3} texto={`${ev?.qtd_partes_texto ?? 0} partes do texto`} />
+            </div>
+            {reps.length === 0 ? (
+              <Vazio texto="Nenhum repertório identificado." />
+            ) : (
+              <ul className="divide-y divide-stone-100">
+                {reps.map((rep, i) => {
+                  const status = !rep.legitimado
+                    ? { t: 'Não legitimado', tom: 'amber' as const }
+                    : !rep.pertinente
+                    ? { t: 'Não pertinente', tom: 'amber' as const }
+                    : rep.uso_produtivo
+                    ? { t: 'Produtivo', tom: 'teal' as const }
+                    : { t: 'Não produtivo', tom: 'stone' as const };
+                  return (
+                    <li key={i} className="py-2.5 first:pt-0 last:pb-0 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-stone-800 line-clamp-2">“{rep.trecho_citado}”</p>
+                        <p className="text-stone-400 mt-0.5">{rep.fonte_ou_area}</p>
+                      </div>
+                      <Etiqueta texto={status.t} tom={status.tom} />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        );
+      }
+
+      case 'c3':
+        return (
+          <div className="space-y-2">
+            <p className="text-stone-600">{c.c3.justificativa_oficial}</p>
+            {ev?.possui_contradicao_grave && ev.contradicao_trecho && (
+              <p className="text-amber-800">Contradição: “{ev.contradicao_trecho}”</p>
+            )}
+          </div>
+        );
+
+      case 'c4': {
+        const inad = ev?.inadequacoes_coesivas || [];
+        const reps = ev?.repeticoes_excessivas_palavras || [];
+        return (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              <Fato
+                ok={(ev?.conectivos_interparagrafos_contagem ?? 0) >= 3}
+                texto={`${ev?.conectivos_interparagrafos_contagem ?? 0} conectivos entre parágrafos`}
+              />
+              <Fato ok={inad.length === 0} texto={inad.length === 0 ? 'Sem inadequações' : `${inad.length} inadequação(ões)`} />
+              <Fato ok={reps.length === 0} texto={reps.length === 0 ? 'Sem repetições excessivas' : `${reps.length} repetição(ões)`} />
+            </div>
+            {inad.length > 0 && (
+              <ul className="divide-y divide-stone-100">
+                {inad.map((it, i) => (
+                  <li key={i} className="py-2 first:pt-0 last:pb-0">
+                    <span className="text-stone-800 font-medium">“{it.conectivo}”</span>
+                    <span className="text-stone-500"> — {it.explicacao}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {reps.length > 0 && (
+              <p className="text-stone-600">
+                <span className="text-stone-400">Repetições: </span>
+                {reps.join(', ')}
+              </p>
+            )}
+          </div>
+        );
+      }
+
+      case 'c5': {
+        if (!proposta) return <Vazio texto="Proposta de intervenção não identificada." />;
+        const elementos = [
+          { label: 'Agente', data: proposta.agente },
+          { label: 'Ação', data: proposta.acao },
+          { label: 'Meio / modo', data: proposta.meio_modo },
+          { label: 'Efeito', data: proposta.efeito },
+          { label: 'Detalhamento', data: proposta.detalhamento },
+        ];
+        return (
+          <ul className="divide-y divide-stone-100">
+            {elementos.map((el, i) => {
+              const ok = Boolean(el.data?.valido);
+              return (
+                <li key={i} className="py-2.5 first:pt-0 last:pb-0 flex items-start gap-3">
+                  <span
+                    className={`mt-0.5 w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
+                      ok ? 'bg-teal-600 text-white' : 'bg-stone-200 text-stone-500'
+                    }`}
+                  >
+                    {ok ? <Check className="w-2.5 h-2.5" strokeWidth={3} /> : <Minus className="w-2.5 h-2.5" strokeWidth={3} />}
+                  </span>
+                  <div className="min-w-0">
+                    <p className={`font-medium ${ok ? 'text-stone-800' : 'text-stone-400'}`}>{el.label}</p>
+                    <p className={ok ? 'text-stone-500' : 'text-stone-400 italic'}>
+                      {el.data?.trecho && ok ? `“${el.data.trecho}”` : 'Ausente ou inválido'}
+                    </p>
+                    {(el.data as any)?.nulo_motivo && (
+                      <p className="text-amber-700 mt-0.5">{(el.data as any).nulo_motivo}</p>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        );
+      }
+    }
+  };
+
+  const resumoComp = (id: CompId, item: CompetenciaScore): string => {
+    switch (id) {
+      case 'c1':
+        return falhas.length + desvios.length === 0
+          ? 'Sem desvios'
+          : `${desvios.length} desvio(s)${falhas.length ? ` · ${falhas.length} falha(s) sintática(s)` : ''}`;
+      case 'c2':
+        return `${(ev?.repertorios || []).filter((r) => r.legitimado && r.pertinente && r.uso_produtivo).length} repertório(s) produtivo(s)`;
+      case 'c3':
+        return item.pontos === 200 ? 'Projeto de texto estratégico' : 'Projeto de texto com falhas';
+      case 'c4':
+        return `${ev?.conectivos_interparagrafos_contagem ?? 0} conectivo(s) entre parágrafos`;
+      case 'c5': {
+        const p = proposta;
+        const n = p ? [p.agente, p.acao, p.meio_modo, p.efeito, p.detalhamento].filter((e) => e?.valido).length : 0;
+        return `${n} de 5 elementos`;
+      }
+    }
+  };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3 sm:p-6 backdrop-blur-sm overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-stone-950/50 p-0 sm:p-6 backdrop-blur-xs overflow-y-auto print:static print:bg-white print:p-0"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden my-auto border border-slate-200"
+        className="bg-[#FAF9F6] w-full max-w-3xl sm:rounded-2xl shadow-2xl overflow-hidden my-auto print:shadow-none print:max-w-none"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Action Bar */}
-        <div className="bg-white text-stone-900 px-6 py-4 flex items-center justify-between print:hidden border-b border-stone-200">
-          <div className="flex items-center gap-3">
-            <img
-              src="/mascote.jpg"
-              alt="Mascote"
-              className="w-10 h-10 rounded-xl object-cover border border-stone-200 shadow-xs"
-            />
-            <div>
-              <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-stone-900">
-                Espelho de Avaliação — ENEM
-              </h2>
-              <p className="text-xs text-stone-500">
-                <span className="text-stone-800 font-semibold">{alunoNome}</span>
+        {/* Cabeçalho */}
+        <div className="bg-white px-5 sm:px-6 py-3.5 flex items-center justify-between gap-3 border-b border-stone-200/80 sticky top-0 z-10">
+          <div className="flex items-center gap-3 min-w-0">
+            <img src="/mascote.jpg" alt="" className="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-stone-900 truncate">{alunoNome}</h2>
+              <p className="text-[11px] text-stone-500">
+                Espelho de avaliação
                 {typeof ev?.total_linhas_manuscritas === 'number' && ev.total_linhas_manuscritas > 0 && (
-                  <span className="ml-2 px-2 py-0.5 bg-stone-100 rounded text-stone-600 font-medium">
-                    {ev.total_linhas_manuscritas} linhas manuscritas
-                  </span>
+                  <> · {ev.total_linhas_manuscritas} linhas</>
                 )}
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 print:hidden">
             <button
-              onClick={imprimirEspelho}
-              className="flex items-center gap-2 px-4 py-2 bg-stone-900 hover:bg-stone-800 text-xs font-bold rounded-xl text-white transition cursor-pointer shadow-xs"
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-stone-600 hover:bg-stone-100 transition cursor-pointer"
+              title="Imprimir ou salvar em PDF"
             >
               <Printer className="w-4 h-4" />
-              Imprimir / PDF
+              <span className="hidden sm:inline">Imprimir</span>
             </button>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-stone-100 rounded-xl text-stone-500 hover:text-stone-900 transition cursor-pointer"
+              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-800 hover:bg-stone-100 transition cursor-pointer"
               title="Fechar (Esc)"
             >
               <X className="w-5 h-5" />
@@ -149,393 +319,213 @@ export default function StudentScoreModal({
           </div>
         </div>
 
-        {/* Corpo Principal Rolável */}
-        <div className="p-6 sm:p-8 space-y-6 max-h-[86vh] overflow-y-auto print:max-h-none print:overflow-visible text-slate-900">
-          {/* Banner Superior do Aluno + Nota Global */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-slate-50 border border-slate-200/90 rounded-2xl p-5 gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-extrabold tracking-widest text-indigo-700 uppercase bg-indigo-100/80 px-2.5 py-0.5 rounded-md">
-                  Boletim Individual Auditado
-                </span>
-                {c.copia_percentual !== undefined && c.copia_percentual > 0 && (
-                  <span className="text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">
-                    {c.copia_percentual}% similaridade com motivadores
-                  </span>
-                )}
-              </div>
-              <h1 className="text-2xl font-black text-slate-950 tracking-tight">{alunoNome}</h1>
-              <p className="text-xs text-slate-500 font-mono">Registro: {c.redacao_id}</p>
-            </div>
-
-            <div className="flex items-center gap-4 bg-white px-5 py-3.5 rounded-xl border-2 border-slate-200 shadow-xs self-stretch sm:self-auto justify-between">
-              <div className="text-left sm:text-right">
-                <div className="text-[11px] uppercase font-extrabold tracking-wider text-slate-500 flex items-center gap-1 sm:justify-end">
-                  <Award className="w-3.5 h-3.5 text-indigo-600" /> Nota Final
-                </div>
-                <div className="text-[11px] text-slate-400 font-medium">Escala Oficial 0–1000</div>
-              </div>
-              <div
-                className={`text-4xl font-black tracking-tight ${
-                  c.anulada
-                    ? 'text-red-600'
-                    : c.nota_total >= 900
-                    ? 'text-emerald-600'
-                    : c.nota_total >= 700
-                    ? 'text-indigo-700'
-                    : 'text-slate-900'
-                }`}
-              >
-                {c.anulada ? '0' : c.nota_total}
-              </div>
-            </div>
-          </div>
-
-          {/* Alerta de Anulação se houver */}
-          {c.anulada && (
-            <div className="p-4 bg-red-50 border-2 border-red-200 border-l-8 border-l-red-600 rounded-xl flex items-start gap-3.5">
-              <ShieldAlert className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
+        <div className="p-5 sm:p-6 space-y-5 max-h-[calc(100vh-4rem)] sm:max-h-[82vh] overflow-y-auto print:max-h-none print:overflow-visible">
+          {/* Nota final + barra das 5 competências */}
+          <section className="bg-white rounded-2xl border border-stone-200/80 p-5">
+            <div className="flex items-end justify-between gap-4">
               <div>
-                <h3 className="font-black text-red-950 text-sm uppercase tracking-wide">
-                  Redação Anulada — Nota Zero Geral
-                </h3>
-                <p className="text-sm text-red-800 mt-0.5">
-                  <strong>Critério Hierárquico Acionado:</strong> {c.motivo_anulacao}
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-400">Nota final</p>
+                <p className={`text-5xl font-black tracking-tight leading-none mt-1 ${corNota}`}>
+                  {nota}
+                  <span className="text-base font-semibold text-stone-300 ml-1">/1000</span>
                 </p>
-                <p className="text-xs text-red-700 mt-1">{c.justificativa_anulacao}</p>
               </div>
+              {c.copia_percentual !== undefined && c.copia_percentual > 0 && (
+                <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
+                  {c.copia_percentual}% similar aos motivadores
+                </span>
+              )}
             </div>
-          )}
 
-          {/* Grade das 5 Competências com as Cores Oficiais do ENEM 2025 */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-              Desempenho por Competência (Matriz de Referência 2025)
-            </h3>
-            <div className="grid grid-cols-1 gap-3">
-              {competenciasConfig.map((comp) => {
-                const percentual = Math.min(100, Math.round((comp.item.pontos / 200) * 100));
+            <div className="grid grid-cols-5 gap-2 mt-5">
+              {COMPETENCIAS.map((comp) => {
+                const pts = c[comp.id].pontos;
                 return (
-                  <div
+                  <button
                     key={comp.id}
-                    className={`bg-white border border-slate-200 border-l-4 ${comp.corBorda} rounded-xl p-4 shadow-2xs hover:border-slate-300 transition`}
+                    onClick={() => {
+                      setAbertas((prev) => new Set(prev).add(comp.id));
+                      document.getElementById(`comp-${comp.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="text-left group cursor-pointer"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-extrabold px-2 py-0.5 rounded border ${comp.corBadge}`}>
-                            {comp.id}
-                          </span>
-                          <span className="font-extrabold text-slate-950 text-sm">{comp.titulo}</span>
-                          <span className="text-xs text-slate-500 hidden md:inline">— {comp.subtitulo}</span>
-                        </div>
-                        <p className="text-xs text-slate-700 font-medium pt-1">
-                          {comp.item.justificativa_oficial}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
-                        <span className="px-2.5 py-1 text-xs font-extrabold rounded-lg bg-slate-100 text-slate-800 border border-slate-200">
-                          Nível {comp.item.nivel}
-                        </span>
-                        <div className="w-24 text-right">
-                          <span className="text-xl font-black text-slate-950">{comp.item.pontos}</span>
-                          <span className="text-xs text-slate-400 font-semibold"> / 200</span>
-                        </div>
-                      </div>
+                    <div className="h-1.5 rounded-full bg-stone-100 overflow-hidden">
+                      <div className={`h-full ${comp.cor}`} style={{ width: `${(pts / 200) * 100}%` }} />
                     </div>
-
-                    {/* Barra visual de nível */}
-                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-3">
-                      <div
-                        className={`h-full ${comp.corBarra} transition-all duration-500`}
-                        style={{ width: `${percentual}%` }}
-                      />
+                    <div className="mt-1.5 flex items-baseline justify-between">
+                      <span className="text-[11px] font-semibold text-stone-400 group-hover:text-stone-700">{comp.sigla}</span>
+                      <span className={`text-sm font-bold tabular-nums ${pts < 200 ? 'text-amber-700' : 'text-stone-800'}`}>{pts}</span>
                     </div>
-
-                    {/* Travas acionadas se houver */}
-                    {comp.item.travas_acionadas.length > 0 && (
-                      <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {comp.item.travas_acionadas.map((t, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-lg"
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  </button>
                 );
               })}
             </div>
-          </div>
+          </section>
 
-          {/* Painel Detalhado de Evidências Auditadas (C1, C2/C4 e C5) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Bloco C1: Desvios e Estrutura Sintática */}
-            <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/60 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-fuchsia-700" />
-                    Auditoria Gramatical e Sintática (C1)
-                  </h4>
-                  <span className="text-xs font-bold px-2.5 py-0.5 bg-white border border-slate-200 rounded-lg text-slate-800">
-                    {totalDesviosC1} registro(s)
-                  </span>
-                </div>
-
-                {totalDesviosC1 === 0 ? (
-                  <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-900 flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                    Excelência formal: nenhum desvio gramatical ou falha sintática validado no texto.
-                  </div>
-                ) : (
-                  <ul className="space-y-2 max-h-56 overflow-y-auto pr-1 text-xs">
-                    {ev?.falhas_sintaticas?.map((f, i) => (
-                      <li
-                        key={`sint-${i}`}
-                        className="p-2.5 bg-amber-50/90 rounded-xl border border-amber-200 flex flex-col gap-0.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-amber-950">"{f.trecho_original}"</span>
-                          <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 bg-amber-200/70 text-amber-900 rounded">
-                            Falha sintática • {f.tipo}
-                          </span>
-                        </div>
-                        {f.explicacao_curta && <span className="text-amber-800">{f.explicacao_curta}</span>}
-                      </li>
-                    ))}
-                    {c.desvios_c1_validados?.map((d, i) => (
-                      <li
-                        key={`desv-${i}`}
-                        className="p-2.5 bg-white rounded-xl border border-slate-200 flex flex-col gap-0.5 shadow-2xs"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded">
-                            "{d.trecho_original}"
-                          </span>
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-slate-100 text-slate-700 rounded">
-                            {d.tipo}
-                          </span>
-                        </div>
-                        <span className="text-slate-600 mt-1">
-                          {d.forma_correta && (
-                            <span className="font-semibold text-emerald-700 mr-1">→ {d.forma_correta}.</span>
-                          )}
-                          {d.explicacao_curta}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+          {/* Anulação */}
+          {c.anulada && (
+            <section className="rounded-2xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-bold text-red-900">Redação anulada</p>
+                <p className="text-red-800 text-xs mt-0.5">
+                  {c.motivo_anulacao?.replace(/_/g, ' ').toLowerCase()}
+                  {c.justificativa_anulacao && ` — ${c.justificativa_anulacao}`}
+                </p>
               </div>
+            </section>
+          )}
 
-              {/* Resumo Coesivo C4 + Repertório C2 */}
-              <div className="mt-4 pt-3 border-t border-slate-200/80 space-y-2 text-xs">
-                <div className="flex items-center justify-between text-slate-700">
-                  <span className="font-bold flex items-center gap-1.5">
-                    <Link2 className="w-3.5 h-3.5 text-amber-600" /> Conectivos Interparágrafos (C4):
-                  </span>
-                  <span className="font-extrabold text-slate-900">
-                    {ev?.conectivos_interparagrafos_contagem ?? 0} identificado(s)
-                  </span>
-                </div>
-
-                {ev?.inadequacoes_coesivas && ev.inadequacoes_coesivas.length > 0 && (
-                  <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 space-y-1 text-[11px] text-amber-950">
-                    <div className="font-bold">Inadequações coesivas (C4):</div>
-                    {ev.inadequacoes_coesivas.map((inad, idx) => (
-                      <div key={idx}>
-                        <span className="font-semibold">"{inad.conectivo}"</span> — {inad.explicacao}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {ev?.repeticoes_excessivas_palavras && ev.repeticoes_excessivas_palavras.length > 0 && (
-                  <div className="bg-amber-50/60 p-2.5 rounded-xl border border-amber-200 text-[11px] text-amber-950">
-                    <span className="font-bold">Repetições excessivas (C4): </span>
-                    {ev.repeticoes_excessivas_palavras.join(', ')}
-                  </div>
-                )}
-
-                {ev?.repertorios && ev.repertorios.length > 0 && (
-                  <div className="bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
-                    <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                      <BookOpen className="w-3.5 h-3.5 text-rose-700" /> Repertório Sociocultural (C2):
+          {/* Competências (acordeão) */}
+          <section className="bg-white rounded-2xl border border-stone-200/80 divide-y divide-stone-100 overflow-hidden">
+            {COMPETENCIAS.map((comp) => {
+              const item = c[comp.id];
+              const aberta = abertas.has(comp.id);
+              const perdeu = 200 - item.pontos;
+              return (
+                <div key={comp.id} id={`comp-${comp.id}`} className="scroll-mt-20">
+                  <button
+                    onClick={() => alternar(comp.id)}
+                    className="w-full flex items-center gap-3 px-5 py-3.5 text-left hover:bg-stone-50/70 transition cursor-pointer"
+                  >
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${comp.cor}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-stone-900">
+                        <span className="text-stone-400 font-medium mr-1.5">{comp.sigla}</span>
+                        {comp.titulo}
+                      </p>
+                      <p className="text-xs text-stone-500 truncate">{resumoComp(comp.id, item)}</p>
                     </div>
-                    {ev.repertorios.map((rep, idx) => (
-                      <div key={idx} className="text-[11px] text-slate-600 flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <span className="font-semibold text-slate-800">"{rep.trecho_citado}"</span>
-                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-medium">
-                          {rep.fonte_ou_area}
-                        </span>
-                        {!rep.legitimado ? (
-                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold">
-                            Não legitimado
-                          </span>
-                        ) : !rep.pertinente ? (
-                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold">
-                            Não pertinente
-                          </span>
-                        ) : rep.uso_produtivo ? (
-                          <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">
-                            Uso Produtivo
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded font-semibold">
-                            Não produtivo
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Bloco C5: Checklist dos 5 Elementos da Proposta de Intervenção */}
-            <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/60">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-700" />
-                  5 Elementos da Proposta de Intervenção (C5)
-                </h4>
-                <span className="text-xs font-bold px-2.5 py-0.5 bg-white border border-slate-200 rounded-lg text-slate-800">
-                  {c.c5.nivel} / 5 válidos
-                </span>
-              </div>
-
-              {ev?.proposta_intervencao ? (
-                <div className="space-y-2 text-xs">
-                  {[
-                    { label: '1. Agente (Quem?)', data: ev.proposta_intervencao.agente },
-                    { label: '2. Ação (O que fará?)', data: ev.proposta_intervencao.acao },
-                    { label: '3. Meio / Modo (Como?)', data: ev.proposta_intervencao.meio_modo },
-                    { label: '4. Efeito (Para quê?)', data: ev.proposta_intervencao.efeito },
-                    { label: '5. Detalhamento', data: ev.proposta_intervencao.detalhamento },
-                  ].map((elem, i) => {
-                    const isValido = Boolean(elem.data?.valido);
-                    return (
-                      <div
-                        key={i}
-                        className={`p-2.5 rounded-xl border flex items-start justify-between gap-3 ${
-                          isValido
-                            ? 'bg-white border-slate-200 shadow-2xs'
-                            : 'bg-rose-50/50 border-rose-200'
-                        }`}
-                      >
-                        <div className="space-y-0.5">
-                          <div className="font-extrabold text-slate-900">{elem.label}</div>
-                          <div className="text-slate-600 leading-snug">
-                            {elem.data?.trecho ? `"${elem.data.trecho}"` : '(Não identificado no texto)'}
-                          </div>
-                          {(elem.data as any)?.nulo_motivo && (
-                            <div className="text-[11px] text-rose-700 font-semibold">
-                              Motivo: {(elem.data as any).nulo_motivo}
-                            </div>
-                          )}
-                        </div>
-                        <span
-                          className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md shrink-0 ${
-                            isValido
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                              : 'bg-rose-100 text-rose-900 border border-rose-200'
-                          }`}
-                        >
-                          {isValido ? <Check className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                          {isValido ? 'Válido' : 'Ausente'}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-500">Sem dados estruturados de proposta de intervenção.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Seção do Texto / Folha Manuscrita (Lado a Lado quando houver imagem + transcrição) */}
-          {(textoOriginal || imagemUrl) && (
-            <div
-              className={`grid grid-cols-1 ${
-                textoOriginal && imagemUrl ? 'lg:grid-cols-2' : ''
-              } gap-5 pt-2`}
-            >
-              {textoOriginal && (
-                <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/70">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-indigo-700" />
-                        {imagemUrl ? 'Transcrição Fiel da Folha Manuscrita' : 'Texto Integral da Redação'}
-                      </h4>
-                      <span className="text-[11px] font-bold px-2 py-0.5 bg-white border border-slate-200 rounded-md text-slate-700">
-                        {paragrafosTexto.length} parágrafo(s)
-                      </span>
-                    </div>
-                    {imagemUrl && (
-                      <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                        Transcrição automática — confira a grafia na folha ao lado
+                    {perdeu > 0 && (
+                      <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-md shrink-0">
+                        −{perdeu}
                       </span>
                     )}
-                  </div>
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-mono leading-relaxed text-slate-800 max-h-96 overflow-y-auto print:max-h-none space-y-3">
-                    {paragrafosTexto.map((paragrafo, idx) => (
-                      <p
-                        key={idx}
-                        className="pb-2.5 last:pb-0 border-b last:border-b-0 border-slate-100 whitespace-pre-wrap"
-                      >
-                        <span className="inline-block text-[10px] font-sans font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 rounded px-1.5 py-0.2 mr-2 select-none">
-                          {idx + 1}º §
-                        </span>
-                        {paragrafo}
-                      </p>
-                    ))}
+                    <span className="text-sm font-bold tabular-nums text-stone-900 w-9 text-right shrink-0">{item.pontos}</span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-stone-400 shrink-0 transition-transform print:hidden ${aberta ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+
+                  <div className={`${aberta ? 'block' : 'hidden'} print:block px-5 pb-4 pl-10 text-xs leading-relaxed`}>
+                    {item.travas_acionadas.length > 0 && (
+                      <div className="mb-3 space-y-1">
+                        {item.travas_acionadas.map((t, i) => (
+                          <p key={i} className="flex items-start gap-1.5 text-amber-800">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                            {t}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    {renderDetalhe(comp.id)}
                   </div>
                 </div>
-              )}
+              );
+            })}
+          </section>
 
-              {imagemUrl && (
-                <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/70">
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <h4 className="font-extrabold text-slate-900 text-sm">
-                      Digitalização da Folha Manuscrita
-                    </h4>
+          {/* Texto da redação */}
+          {(paragrafos.length > 0 || imagemUrl) && (
+            <section className="bg-white rounded-2xl border border-stone-200/80 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-stone-100">
+                {paragrafos.length > 0 && imagemUrl ? (
+                  <div className="inline-flex p-0.5 bg-stone-100 rounded-lg text-xs font-semibold print:hidden">
+                    {(['transcricao', 'folha'] as const).map((aba) => (
+                      <button
+                        key={aba}
+                        onClick={() => setAbaTexto(aba)}
+                        className={`px-3 py-1 rounded-md transition cursor-pointer ${
+                          abaTexto === aba ? 'bg-white text-stone-900 shadow-2xs' : 'text-stone-500 hover:text-stone-800'
+                        }`}
+                      >
+                        {aba === 'transcricao' ? 'Transcrição' : 'Folha original'}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm font-semibold text-stone-900">
+                    {imagemUrl ? 'Folha original' : 'Texto da redação'}
+                  </p>
+                )}
+                <div className="flex items-center gap-3 text-[11px] text-stone-400">
+                  {abaTexto === 'transcricao' && paragrafos.length > 0 && <span>{paragrafos.length} parágrafos</span>}
+                  {imagemUrl && (
                     <a
                       href={imagemUrl}
                       download={`${alunoNome}.${isPdf ? 'pdf' : 'jpg'}`}
-                      className="text-[11px] font-bold text-indigo-700 hover:underline print:hidden"
+                      className="inline-flex items-center gap-1 font-semibold text-stone-500 hover:text-stone-900 print:hidden"
                     >
-                      Abrir / Baixar original
+                      <Download className="w-3.5 h-3.5" /> Baixar
                     </a>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl border border-slate-200 max-h-96 overflow-y-auto flex justify-center">
-                    {isPdf ? (
-                      <iframe
-                        src={imagemUrl}
-                        title="Folha Manuscrita PDF"
-                        className="w-full h-96 rounded-lg border-0 bg-white"
-                      />
-                    ) : (
-                      <img
-                        src={imagemUrl}
-                        alt="Folha Manuscrita"
-                        className="max-h-88 w-auto rounded object-contain"
-                      />
-                    )}
-                  </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+
+              {abaTexto === 'transcricao' && paragrafos.length > 0 ? (
+                <div className="px-5 sm:px-8 py-5 max-h-[28rem] overflow-y-auto print:max-h-none space-y-3.5 text-[13px] leading-7 text-stone-800 font-serif">
+                  {paragrafos.map((p, i) => (
+                    <p key={i} className="indent-6 relative">
+                      <span className="absolute -left-5 sm:-left-6 top-0 text-[10px] font-sans font-semibold text-stone-300 select-none indent-0">
+                        {i + 1}
+                      </span>
+                      {p}
+                    </p>
+                  ))}
+                  {imagemUrl && (
+                    <p className="pt-2 text-[11px] font-sans text-stone-400">
+                      Transcrição automática — confira a grafia na folha original.
+                    </p>
+                  )}
+                </div>
+              ) : imagemUrl ? (
+                <div className="bg-stone-50 p-3 flex justify-center">
+                  {isPdf ? (
+                    <iframe src={imagemUrl} title="Folha original" className="w-full h-[32rem] rounded-lg border-0 bg-white" />
+                  ) : (
+                    <img src={imagemUrl} alt="Folha original" className="max-h-[32rem] w-auto rounded-lg object-contain" />
+                  )}
+                </div>
+              ) : null}
+            </section>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------- Componentes auxiliares ----------
+function Etiqueta({ texto, tom = 'stone' }: { texto: string; tom?: 'stone' | 'amber' | 'teal' }) {
+  const cores = {
+    stone: 'bg-stone-100 text-stone-500',
+    amber: 'bg-amber-50 text-amber-800',
+    teal: 'bg-teal-50 text-teal-800',
+  };
+  return (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${cores[tom]}`}>
+      {texto}
+    </span>
+  );
+}
+
+function Fato({ ok, texto }: { ok: boolean; texto: string }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
+        ok ? 'bg-teal-50 text-teal-800' : 'bg-amber-50 text-amber-800'
+      }`}
+    >
+      {ok ? <Check className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+      {texto}
+    </span>
+  );
+}
+
+function Vazio({ texto }: { texto: string }) {
+  return (
+    <p className="flex items-center gap-1.5 text-teal-800">
+      <Check className="w-3.5 h-3.5" /> {texto}
+    </p>
   );
 }
