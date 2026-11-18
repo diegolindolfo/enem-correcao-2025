@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       tema,
       textosMotivadores = '',
       apiKey: customApiKey,
-      modelName = 'gemini-3.8-flash',
+      modelName = 'gemini-4-hydrogen',
       cacheName,
     } = body;
 
@@ -157,9 +157,6 @@ export async function POST(req: NextRequest) {
     const config: any = {
       responseMimeType: 'application/json',
       responseSchema: ENEM_EVIDENCE_RESPONSE_SCHEMA,
-      temperature: 0,
-      topP: 0.1,
-      topK: 1,
       systemInstruction: ENEM_SYSTEM_INSTRUCTION,
     };
 
@@ -167,12 +164,11 @@ export async function POST(req: NextRequest) {
     let response: any;
     let lastError: any;
     let modeloUtilizado = modelName;
-    // Fallback apenas entre modelos flash ultra-rápidos e econômicos (evita Pro inesperado)
+    // Fallback apenas entre modelos rápidos e econômicos (evita Argon/Carbon inesperado)
     const catalogoFallback = [
       'gemini-3.8-flash',
       'gemini-3.5-flash-lite',
-      'gemini-3-flash-preview',
-      'gemini-3.1-flash-lite',
+      'gemini-4-hydrogen',
     ];
     const modelosParaTentar = [
       modelName,

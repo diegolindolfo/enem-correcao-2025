@@ -35,7 +35,7 @@ export default function BatchWorkspace() {
   const [tema, setTema] = useState('');
   const [erroTema, setErroTema] = useState(false);
   const [textosMotivadores, setTextosMotivadores] = useState('');
-  const [modelName, setModelName] = useState('gemini-3.8-flash');
+  const [modelName, setModelName] = useState('gemini-4-hydrogen');
   const [concorrencia, setConcorrencia] = useState(3);
 
   const [items, setItems] = useState<BatchItem[]>([]);
@@ -855,11 +855,11 @@ export default function BatchWorkspace() {
                     onChange={(e) => setModelName(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-stone-200 focus:outline-none focus:border-teal-700 cursor-pointer"
                   >
+                    <option value="gemini-4-hydrogen">gemini-4-hydrogen (Padrão / Gemini 4)</option>
                     <option value="gemini-3.8-flash">gemini-3.8-flash</option>
                     <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
-                    <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
-                    <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                    <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                    <option value="gemini-4-argon">gemini-4-argon (Raciocínio Avançado)</option>
+                    <option value="gemini-4-carbon">gemini-4-carbon (Máxima Precisão)</option>
                   </select>
                 </div>
 
