@@ -60,6 +60,30 @@ export default function StudentScoreModal({
   );
   const [abaTexto, setAbaTexto] = useState<'transcricao' | 'folha'>('transcricao');
 
+  // O Chrome bloqueia PDF em iframe com src "data:"; convertemos para blob: URL
+  const [arquivoUrl, setArquivoUrl] = useState<string | undefined>(imagemUrl);
+  useEffect(() => {
+    if (!imagemUrl || !imagemUrl.startsWith('data:')) {
+      setArquivoUrl(imagemUrl);
+      return;
+    }
+    let url: string | undefined;
+    try {
+      const [cabecalho, base64] = imagemUrl.split(',');
+      const mime = cabecalho.match(/data:([^;]+)/)?.[1] || 'application/octet-stream';
+      const bin = atob(base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      setArquivoUrl(url);
+    } catch {
+      setArquivoUrl(imagemUrl);
+    }
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [imagemUrl]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -452,7 +476,7 @@ export default function StudentScoreModal({
                   {abaTexto === 'transcricao' && paragrafos.length > 0 && <span>{paragrafos.length} parágrafos</span>}
                   {imagemUrl && (
                     <a
-                      href={imagemUrl}
+                      href={arquivoUrl}
                       download={`${alunoNome}.${isPdf ? 'pdf' : 'jpg'}`}
                       className="inline-flex items-center gap-1 font-semibold text-stone-500 hover:text-stone-900 print:hidden"
                     >
@@ -463,7 +487,7 @@ export default function StudentScoreModal({
               </div>
 
               {abaTexto === 'transcricao' && paragrafos.length > 0 ? (
-                <div className="px-5 sm:px-8 py-5 max-h-[28rem] overflow-y-auto print:max-h-none space-y-3.5 text-[13px] leading-7 text-stone-800 font-serif">
+                <div className="px-5 sm:px-8 py-5 space-y-3.5 text-[13px] leading-7 text-stone-800 font-serif">
                   {paragrafos.map((p, i) => (
                     <p key={i} className="indent-6 relative">
                       <span className="absolute -left-5 sm:-left-6 top-0 text-[10px] font-sans font-semibold text-stone-300 select-none indent-0">
@@ -481,9 +505,13 @@ export default function StudentScoreModal({
               ) : imagemUrl ? (
                 <div className="bg-stone-50 p-3 flex justify-center">
                   {isPdf ? (
-                    <iframe src={imagemUrl} title="Folha original" className="w-full h-[32rem] rounded-lg border-0 bg-white" />
+                    <iframe
+                      src={arquivoUrl ? `${arquivoUrl}#toolbar=0&view=FitH` : undefined}
+                      title="Folha original"
+                      className="w-full h-[40rem] rounded-lg border-0 bg-white"
+                    />
                   ) : (
-                    <img src={imagemUrl} alt="Folha original" className="max-h-[32rem] w-auto rounded-lg object-contain" />
+                    <img src={arquivoUrl} alt="Folha original" className="w-full h-auto rounded-lg object-contain" />
                   )}
                 </div>
               ) : null}
