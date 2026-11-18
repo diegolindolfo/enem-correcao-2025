@@ -89,6 +89,12 @@ export default function StudentScoreModal({
 
   const totalDesviosC1 = (c.desvios_c1_validados?.length || 0) + (ev?.falhas_sintaticas?.length || 0);
 
+  const isPdf = Boolean(
+    imagemUrl &&
+      (imagemUrl.startsWith('data:application/pdf') ||
+        imagemUrl.toLowerCase().endsWith('.pdf'))
+  );
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3 sm:p-6 backdrop-blur-sm overflow-y-auto"
@@ -335,6 +341,24 @@ export default function StudentScoreModal({
                   </span>
                 </div>
 
+                {ev?.inadequacoes_coesivas && ev.inadequacoes_coesivas.length > 0 && (
+                  <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 space-y-1 text-[11px] text-amber-950">
+                    <div className="font-bold">Inadequações coesivas (C4):</div>
+                    {ev.inadequacoes_coesivas.map((inad, idx) => (
+                      <div key={idx}>
+                        <span className="font-semibold">"{inad.conectivo}"</span> — {inad.explicacao}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {ev?.repeticoes_excessivas_palavras && ev.repeticoes_excessivas_palavras.length > 0 && (
+                  <div className="bg-amber-50/60 p-2.5 rounded-xl border border-amber-200 text-[11px] text-amber-950">
+                    <span className="font-bold">Repetições excessivas (C4): </span>
+                    {ev.repeticoes_excessivas_palavras.join(', ')}
+                  </div>
+                )}
+
                 {ev?.repertorios && ev.repertorios.length > 0 && (
                   <div className="bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
                     <div className="font-bold text-slate-800 flex items-center gap-1.5">
@@ -346,9 +370,21 @@ export default function StudentScoreModal({
                         <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-700 font-medium">
                           {rep.fonte_ou_area}
                         </span>
-                        {rep.uso_produtivo && (
+                        {!rep.legitimado ? (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold">
+                            Não legitimado
+                          </span>
+                        ) : !rep.pertinente ? (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded font-bold">
+                            Não pertinente
+                          </span>
+                        ) : rep.uso_produtivo ? (
                           <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold">
                             Uso Produtivo
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded font-semibold">
+                            Não produtivo
                           </span>
                         )}
                       </div>
@@ -448,15 +484,32 @@ export default function StudentScoreModal({
 
               {imagemUrl && (
                 <div className="border border-slate-200 rounded-2xl p-5 bg-slate-50/70">
-                  <h4 className="font-extrabold text-slate-900 text-sm mb-3">
-                    Digitalização da Folha Manuscrita
-                  </h4>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h4 className="font-extrabold text-slate-900 text-sm">
+                      Digitalização da Folha Manuscrita
+                    </h4>
+                    <a
+                      href={imagemUrl}
+                      download={`${alunoNome}.${isPdf ? 'pdf' : 'jpg'}`}
+                      className="text-[11px] font-bold text-indigo-700 hover:underline print:hidden"
+                    >
+                      Abrir / Baixar original
+                    </a>
+                  </div>
                   <div className="bg-white p-2 rounded-xl border border-slate-200 max-h-96 overflow-y-auto flex justify-center">
-                    <img
-                      src={imagemUrl}
-                      alt="Folha Manuscrita"
-                      className="max-h-88 w-auto rounded object-contain"
-                    />
+                    {isPdf ? (
+                      <iframe
+                        src={imagemUrl}
+                        title="Folha Manuscrita PDF"
+                        className="w-full h-96 rounded-lg border-0 bg-white"
+                      />
+                    ) : (
+                      <img
+                        src={imagemUrl}
+                        alt="Folha Manuscrita"
+                        className="max-h-88 w-auto rounded object-contain"
+                      />
+                    )}
                   </div>
                 </div>
               )}

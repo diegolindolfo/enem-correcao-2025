@@ -30,6 +30,8 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 
+const TEMA_MAX_CHARS = 300;
+
 export default function BatchWorkspace() {
   const [apiKey, setApiKey] = useState('');
   const [tema, setTema] = useState('');
@@ -282,7 +284,7 @@ export default function BatchWorkspace() {
 
   const processarUnicoItem = async (item: BatchItem) => {
     const temaEfetivo = (tema.trim() || item.tema || '').trim();
-    if (!temaEfetivo) {
+    if (!temaEfetivo || temaEfetivo.length > TEMA_MAX_CHARS) {
       setErroTema(true);
       temaInputRef.current?.focus();
       return;
@@ -335,8 +337,11 @@ export default function BatchWorkspace() {
       return;
     }
 
-    const faltaTema = queue.some((it) => !(tema.trim() || it.tema || '').trim());
-    if (faltaTema) {
+    const temaInvalido = queue.some((it) => {
+      const t = (tema.trim() || it.tema || '').trim();
+      return !t || t.length > TEMA_MAX_CHARS;
+    });
+    if (temaInvalido) {
       setErroTema(true);
       temaInputRef.current?.focus();
       return;
@@ -524,31 +529,58 @@ export default function BatchWorkspace() {
         <div className="bg-white border border-stone-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-400">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-stone-400 shrink-0">
                   Tema da Redação <span className="text-red-500">*</span>
                 </label>
                 {erroTema && (
-                  <span className="text-[11px] font-semibold text-red-600 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" /> Preencha o tema antes de corrigir
+                  <span className="text-[11px] font-semibold text-red-600 flex items-center gap-1 text-right">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    {tema.trim().length > TEMA_MAX_CHARS
+                      ? `O campo Tema contém um texto longo demais (máx. ${TEMA_MAX_CHARS} caracteres). Digite apenas a frase temática.`
+                      : 'Preencha o tema antes de corrigir'}
                   </span>
                 )}
               </div>
-              <input
-                ref={temaInputRef}
-                type="text"
-                value={tema}
-                onChange={(e) => {
-                  setTema(e.target.value);
-                  if (e.target.value.trim()) setErroTema(false);
-                }}
-                placeholder="Digite a frase temática antes de iniciar a correção..."
-                className={`w-full text-sm font-medium px-3.5 py-2 rounded-xl border transition focus:outline-none ${
-                  erroTema
-                    ? 'border-red-400 bg-red-50/40 focus:border-red-600'
-                    : 'border-stone-200 focus:border-teal-700'
-                }`}
-              />
+              <div className="relative">
+                <input
+                  ref={temaInputRef}
+                  type="text"
+                  value={tema}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setTema(val);
+                    const trimmed = val.trim();
+                    if (trimmed.length > TEMA_MAX_CHARS) {
+                      setErroTema(true);
+                    } else if (trimmed.length > 0) {
+                      setErroTema(false);
+                    }
+                  }}
+                  placeholder="Digite a frase temática antes de iniciar a correção..."
+                  className={`w-full text-sm font-medium pl-3.5 ${
+                    tema.length > 0 ? 'pr-9' : 'pr-3.5'
+                  } py-2 rounded-xl border transition focus:outline-none ${
+                    erroTema
+                      ? 'border-red-400 bg-red-50/40 focus:border-red-600'
+                      : 'border-stone-200 focus:border-teal-700'
+                  }`}
+                />
+                {tema.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTema('');
+                      setErroTema(false);
+                      temaInputRef.current?.focus();
+                    }}
+                    title="Limpar tema"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-700 rounded-md cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-2 sm:self-end">

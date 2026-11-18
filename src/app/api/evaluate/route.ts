@@ -133,7 +133,8 @@ export async function POST(req: NextRequest) {
     const ai = new GoogleGenAI({ apiKey });
 
     const contents: any[] = [];
-    let promptContext = `TEMA DA REDAÇÃO: "${tema || 'Tema padrão do exame'}"\n\n`;
+    const temaSanitizado = String(tema || 'Tema padrão do exame').trim().slice(0, 300);
+    let promptContext = `FRASE TEMÁTICA OFICIAL DA PROPOSTA:\n<frase_tematica>${temaSanitizado}</frase_tematica>\n\n`;
     if (textosMotivadores && textosMotivadores.trim().length > 0) {
       // A detecção de cópia já roda localmente a custo zero; enviamos apenas resumo compacto para checar repertório dos motivadores
       const resumoMotivadores = textosMotivadores.trim().slice(0, 600);

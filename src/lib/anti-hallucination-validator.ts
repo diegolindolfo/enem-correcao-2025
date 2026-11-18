@@ -280,6 +280,29 @@ export function validarEvidenciasAntiAlucinacao(
     }
   }
 
+  // 5b. Saneamento de repertórios: se a própria fonte_ou_area indicar nome não legitimado/não identificável/inventado,
+  // impede contradição marcando legitimado=false e uso_produtivo=false
+  const repertoriosSaneados = Array.isArray(rawEvidence.repertorios)
+    ? rawEvidence.repertorios.map((rep) => {
+        const areaSimp = simplificar(rep?.fonte_ou_area || '');
+        const ehNaoLegitimado =
+          /\b(nao legitimad\w*|nao identificad\w*|nao verificav\w*|inventad\w*|desconhecid\w*|inexistent\w*)\b/.test(
+            areaSimp
+          );
+        if (ehNaoLegitimado) {
+          avisosAuditoria.push(
+            `Repertório marcado como não legitimado pela própria classificação ("${rep.trecho_citado}").`
+          );
+          return {
+            ...rep,
+            legitimado: false,
+            uso_produtivo: false,
+          };
+        }
+        return rep;
+      })
+    : [];
+
   // Clonagem saneada das evidências com arrays garantidos
   const evidenciasSaneadas: ExtractedEvidence = {
     ...rawEvidence,
@@ -289,7 +312,7 @@ export function validarEvidenciasAntiAlucinacao(
     partes_embrionarias_indices: Array.isArray(rawEvidence.partes_embrionarias_indices)
       ? rawEvidence.partes_embrionarias_indices
       : [],
-    repertorios: Array.isArray(rawEvidence.repertorios) ? rawEvidence.repertorios : [],
+    repertorios: repertoriosSaneados,
     inadequacoes_coesivas: inadequacoesValidadas,
     repeticoes_excessivas_palavras: Array.isArray(rawEvidence.repeticoes_excessivas_palavras)
       ? rawEvidence.repeticoes_excessivas_palavras

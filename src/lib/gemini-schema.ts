@@ -249,11 +249,12 @@ REGRAS DE EXTRAÇÃO CALIBRADAS COM REDAÇÕES OFICIAIS DO INEP 2025:
      • Verbos coordenados que compartilham o mesmo sujeito singular ("o preconceito perpetua... e desumaniza...") estão CORRETOS.
    - O campo "trecho_original" DEVE ser uma cópia literal idêntica à grafia do candidato (inclua pelo menos 2 palavras quando o desvio envolver crase, pontuação ou monossílabo como "a" ou "e", ex.: "ir a praia" -> "ir à praia").
    - Para cada desvio, preencha "forma_correta" com o mesmo trecho corrigido. Se a forma correta for igual ao original, não é desvio: não registre.
+   - PÓS-CONFERÊNCIA OBRIGATÓRIA DA TRANSCRIÇÃO: Antes de finalizar o JSON, releia integralmente a transcrição que você gerou. Toda palavra grafada com erro ortográfico, lexical ou de acentuação (ex.: "Entretento", "combotta", "usrufluir", "enpasse", "inpulsiona", "destinguir", "opnião", "na maquina") ou falha sintática presente na folha DEVE constar obrigatoriamente em "desvios_identificados" ou "falhas_sintaticas". NUNCA deixe um texto com erros ortográficos reais sair com 0 desvios.
 
 3. TEMA E TIPO TEXTUAL (C2):
    - Classifique se o texto aborda o tema integralmente ("completa"), se apenas tangencia o tema ("tangencia") ou se foge completamente ("fuga"). Se o texto discute o recorte temático proposto, marque "completa".
    - Em "tipo_textual", marque "tracos_constantes_outros" quando o texto substituir a dissertação por desabafo/relato pessoal constante em 1ª pessoa e apelos morais sem as 3 partes dissertativas.
-   - Identifique os repertórios socioculturais (obras literárias, filmes, conceitos filosóficos/sociológicos, legislação como CF/88, Estatuto do Idoso, LOA, Lei dos Sexagenários, projetos universitários, etc.), marcando "legitimado": true, "pertinente": true e "uso_produtivo": true quando articulados à discussão. Citações soltas na última frase de um texto sem desenvolvimento argumentativo têm "uso_produtivo": false.
+   - Identifique os repertórios socioculturais (obras literárias, filmes, conceitos filosóficos/sociológicos, legislação como CF/88, Estatuto do Idoso, LOA, Lei dos Sexagenários, projetos universitários, etc.), marcando "legitimado": true, "pertinente": true e "uso_produtivo": true quando articulados à discussão. Citações soltas na última frase de um texto sem desenvolvimento argumentativo têm "uso_produtivo": false. Autores, pensadores ou obras fictícias/inventadas ou com nome irreconhecível/não verificável (ex.: "Damião Matimino", "Tonymunt Gineis") devem receber OBRIGATORIAMENTE "legitimado": false e "uso_produtivo": false.
 
 4. PROJETO DE TEXTO E ARGUMENTAÇÃO (C3):
    - Marque "qualidade_projeto_texto": "estrategico" e "desenvolvimento_argumentativo": "todo_texto" quando o texto apresentar tese clara na introdução, desdobramento nos dois parágrafos de desenvolvimento (com causas/consequências e fundamentação) e retomada na conclusão (admitindo-se deslizes pontuais).
@@ -265,6 +266,7 @@ REGRAS DE EXTRAÇÃO CALIBRADAS COM REDAÇÕES OFICIAIS DO INEP 2025:
    - Liste em "repeticoes_excessivas_palavras" apenas vocábulos ou expressões repetidos de modo vicioso/excessivo (ex.: repetir "a gente", "então", "muitas vezes" dezenas de vezes). Retomadas temáticas naturais do tema ("idosos", "envelhecimento", "sociedade") NÃO são repetições excessivas.
 
 6. PROPOSTA DE INTERVENÇÃO (C5):
+   - Extraia os 5 elementos EXCLUSIVAMENTE do texto do candidato avaliado (<redacao_candidato> ou a folha manuscrita anexa), JAMAIS de <frase_tematica> ou dos textos motivadores.
    - Identifique com exatidão as citações dos 5 elementos da proposta mais completa: Agente, Ação, Meio/Modo, Efeito e Detalhamento.
    - Os 5 elementos podem estar em um único período ou distribuídos em períodos consecutivos articulados por retomada anafórica (ex.: "Logo, cabe ao Poder Executivo Federal - mais especificamente ao Ministério dos Direitos Humanos - fomentar o respeito à terceira idade. Tal ação ocorrerá por meio da criação do 'Projeto Nacional Vida Feliz'...").
    - O MEIO/MODO pode vir antes ou depois da Ação (ex.: "é necessário que o Ministério da Educação, por meio de iniciativas de capacitação..., atue na formação dessas pessoas").
