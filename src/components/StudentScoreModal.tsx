@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { CompetenciaScore, GradingResult } from '@/lib/enem-rubric-types';
 import { separarParagrafosTexto } from '@/lib/anti-hallucination-validator';
+import PdfPreview from './PdfPreview';
 import {
   X,
   Printer,
@@ -505,11 +506,7 @@ export default function StudentScoreModal({
               ) : imagemUrl ? (
                 <div className="bg-stone-50 p-3 flex justify-center">
                   {isPdf ? (
-                    <iframe
-                      src={arquivoUrl ? `${arquivoUrl}#toolbar=0&view=FitH` : undefined}
-                      title="Folha original"
-                      className="w-full h-[40rem] rounded-lg border-0 bg-white"
-                    />
+                    <PdfPreview dataUrl={imagemUrl} />
                   ) : (
                     <img src={arquivoUrl} alt="Folha original" className="w-full h-auto rounded-lg object-contain" />
                   )}
