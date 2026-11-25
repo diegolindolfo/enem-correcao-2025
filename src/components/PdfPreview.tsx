@@ -22,14 +22,23 @@ export default function PdfPreview({ dataUrl }: Props) {
       try {
         setEstado('carregando');
         const pdfjs = await import('pdfjs-dist');
-        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+        pdfjs.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
 
         const base64 = dataUrl.split(',')[1] || '';
         const bin = atob(base64);
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 
-        doc = await pdfjs.getDocument({ data: bytes }).promise;
+        // Decodificadores WASM (JBIG2/JPEG2000/ICC) usados por PDFs de scanners como o CamScanner
+        const origin = window.location.origin;
+        doc = await pdfjs.getDocument({
+          data: bytes,
+          wasmUrl: `${origin}/pdfjs/wasm/`,
+          iccUrl: `${origin}/pdfjs/iccs/`,
+          standardFontDataUrl: `${origin}/pdfjs/standard_fonts/`,
+          cMapUrl: `${origin}/pdfjs/cmaps/`,
+          cMapPacked: true,
+        } as any).promise;
         const container = containerRef.current;
         if (cancelado || !container) return;
         container.innerHTML = '';
